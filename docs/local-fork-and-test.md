@@ -22,6 +22,19 @@ git remote add upstream https://github.com/supertestnet/shopstr.git
 git fetch upstream
 ```
 
+### Cloning the upstream PR directly (without forking)
+
+If you just want to review the PR from this repository without creating your own fork, you can fetch the branch straight from the upstream project. Replace `<pr-number>` with the numeric ID of the PR you want to test (for example, `123`).
+
+```bash
+git clone https://github.com/supertestnet/shopstr.git
+cd shopstr
+git fetch origin pull/<pr-number>/head:nip40-pr
+git checkout nip40-pr
+```
+
+> 💡 Tip: If you have the GitHub CLI installed, you can run `gh pr checkout <pr-number>` from inside the cloned repository to achieve the same result.
+
 ## 3. Install Dependencies
 ```bash
 npm install
@@ -45,6 +58,13 @@ If you only want to run tests that mention "expiration" or "NIP-40":
 npm test -- expiration
 ```
 
+To focus on the fetch service behaviour that enforces NIP-40, run the targeted suite:
+```bash
+npm test -- --runTestsByPath utils/nostr/__tests__/fetch-service.test.ts
+```
+
+You should see the assertions confirming that expired listings are filtered out of public views while remaining available to their owners.
+
 ## 6. Launch the Development Server (Optional)
 To see the UI in action:
 ```bash
@@ -67,6 +87,8 @@ After merging or rebasing, rerun:
 ```bash
 npm test
 ```
+
+If you picked up the PR branch directly from the upstream project, repeat the `git fetch origin pull/<pr-number>/head:nip40-pr` command before rerunning the tests so you are exercising the most recent code.
 
 ## 9. Push Any Local Fixes Back to Your Fork
 ```bash
