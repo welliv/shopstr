@@ -160,7 +160,11 @@ export const fetchCart = async (
                   event.tags.some((tag) => tag[0] === "d" && tag[1] === dTag)
                 );
                 if (foundEvent) {
-                  cartArrayFromRelay.push(parseTags(foundEvent) as ProductData);
+                  const parsedProduct = parseTags(foundEvent) as
+                    ProductData | undefined;
+                  if (parsedProduct && !parsedProduct.isExpired) {
+                    cartArrayFromRelay.push(parsedProduct);
+                  }
                 }
               }
             }

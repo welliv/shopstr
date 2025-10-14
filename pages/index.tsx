@@ -38,11 +38,13 @@ export default function Landing() {
     const parsedProductsArray: ProductData[] = [];
     const products = productEventContext.productEvents;
     products.forEach((product: NostrEvent) => {
-      const parsedProduct = parseTags(product) as ProductData;
+      const parsedProduct = parseTags(product);
       if (
+        parsedProduct &&
         parsedProduct.images.length > 0 &&
         parsedProduct.currency &&
-        !parsedProduct.contentWarning
+        !parsedProduct.contentWarning &&
+        !parsedProduct.isExpired
       ) {
         parsedProductsArray.push(parsedProduct);
       }

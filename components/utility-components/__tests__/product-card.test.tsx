@@ -100,7 +100,10 @@ describe("ProductCard", () => {
         />
       );
       fireEvent.click(screen.getByTestId("image-carousel").parentElement!);
-      expect(mockOnClick).toHaveBeenCalledWith(mockProductData);
+      expect(mockOnClick).toHaveBeenCalledWith(
+        mockProductData,
+        expect.any(Object)
+      );
     });
 
     it('shows "shop_profile" dropdown key for the owner', () => {
@@ -128,6 +131,13 @@ describe("ProductCard", () => {
         <ProductCard productData={{ ...mockProductData, status: "sold" }} />
       );
       expect(screen.getByText("Sold")).toBeInTheDocument();
+    });
+
+    it("shows expired status correctly", () => {
+      renderWithContext(
+        <ProductCard productData={{ ...mockProductData, isExpired: true }} />
+      );
+      expect(screen.getByText("Expired")).toBeInTheDocument();
     });
   });
 });

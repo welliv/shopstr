@@ -94,18 +94,22 @@ const DisplayProducts = ({
             const followList = followsContext.followList;
             if (followList.length > 0 && followList.includes(event.pubkey)) {
               const parsedData = parseTags(event);
-              if (parsedData) parsedProductData.push(parsedData);
+              if (!parsedData) return;
+              if (!isMyListings && parsedData.isExpired) return;
+              parsedProductData.push(parsedData);
             }
           }
         } else {
           const parsedData = parseTags(event);
-          if (parsedData) parsedProductData.push(parsedData);
+          if (!parsedData) return;
+          if (!isMyListings && parsedData.isExpired) return;
+          parsedProductData.push(parsedData);
         }
       });
       setProductEvents(parsedProductData);
       setIsProductLoading(false);
     }
-  }, [productEventContext, wotFilter]);
+  }, [productEventContext, wotFilter, isMyListings]);
 
   useEffect(() => {
     if (focusedPubkey && setCategories) {
@@ -128,6 +132,7 @@ const DisplayProducts = ({
       if (!product.currency) return false;
       if (product.images.length === 0) return false;
       if (product.contentWarning) return false;
+      if (!isMyListings && product.isExpired) return false;
       if (
         product.pubkey ===
           "3da2082b7aa5b76a8f0c134deab3f7848c3b5e3a3079c65947d88422b69c1755" &&
@@ -175,6 +180,7 @@ const DisplayProducts = ({
     selectedCategories,
     focusedPubkey,
     isInitialized,
+    isMyListings,
   ]);
 
   // Scroll effect only on page change

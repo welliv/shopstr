@@ -55,6 +55,11 @@ export default function ProductCard({
                 Sold
               </span>
             )}
+            {productData.isExpired && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                Expired
+              </span>
+            )}
           </div>
         )}
         <div className="mb-3">
