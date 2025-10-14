@@ -1,0 +1,78 @@
+import { fetchAllPosts } from "../fetch-service";
+import { NostrManager } from "@/utils/nostr/nostr-manager";
+import { NostrEvent } from "@/utils/types/types";
+import { parseTags } from "@/utils/parsers/product-parser-functions";
+import type { ProductData } from "@/utils/parsers/product-parser-functions";
+import {
+  addProductToCache,
+  fetchAllProductsFromCache,
+  removeProductFromCache,
+} from "../cache-service";
+
+jest.mock("@/utils/parsers/product-parser-functions", () => ({
+  parseTags: jest.fn(),
+}));
+
+jest.mock("../cache-service", () => ({
+  addProductToCache: jest.fn(),
+  fetchAllProductsFromCache: jest.fn(),
+  removeProductFromCache: jest.fn(),
+}));
+
+describe("fetchAllPosts", () => {
+  const mockEditProductContext = jest.fn();
+  const mockFetchFromCache = fetchAllProductsFromCache as jest.Mock;
+  const mockAddProductToCache = addProductToCache as jest.Mock;
+  const mockRemoveProductFromCache = removeProductFromCache as jest.Mock;
+  const mockParseTags = parseTags as jest.Mock;
+
+  const expiredEvent: NostrEvent = {
+    id: "expired-id",
+    pubkey: "expired-pubkey",
+    created_at: 1,
+    kind: 30402,
+    content: "",
+    tags: [],
+    sig: "sig",
+  };
+
+  const activeEvent: NostrEvent = {
+    id: "active-id",
+    pubkey: "active-pubkey",
+    created_at: 2,
+    kind: 30402,
+    content: "",
+    tags: [],
+    sig: "sig",
+  };
+
+  const mockNostrManager = {
+    fetch: jest.fn().mockResolvedValue([expiredEvent, activeEvent]),
+  } as unknown as NostrManager;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockEditProductContext.mockReset();
+    mockFetchFromCache.mockResolvedValue([]);
+    mockParseTags
+      .mockReturnValueOnce({ isExpired: true } as ProductData)
+      .mockReturnValueOnce({ isExpired: false } as ProductData);
+  });
+
+  it("filters out expired listings before caching and returning them", async () => {
+    const result = await fetchAllPosts(
+      mockNostrManager,
+      ["wss://relay"],
+      mockEditProductContext
+    );
+
+    expect(mockParseTags).toHaveBeenCalledTimes(2);
+    expect(mockAddProductToCache).toHaveBeenCalledTimes(1);
+    expect(mockAddProductToCache).toHaveBeenCalledWith(activeEvent);
+    expect(result.productEvents).toEqual([activeEvent]);
+    expect(Array.from(result.profileSetFromProducts)).toEqual([
+      "active-pubkey",
+    ]);
+    expect(mockRemoveProductFromCache).toHaveBeenCalledWith([]);
+  });
+});

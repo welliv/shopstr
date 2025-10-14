@@ -194,4 +194,30 @@ describe("parseTags", () => {
 
     expect(result.contentWarning).toBeFalsy();
   });
+
+  it("should mark listings as expired when the expiration timestamp is in the past", () => {
+    const pastTimestamp = Math.floor(Date.now() / 1000) - 60;
+    const event = {
+      ...baseEvent,
+      tags: [["expiration", pastTimestamp.toString()]],
+    };
+
+    const result = parseTags(event);
+
+    expect(result?.expiration).toBe(pastTimestamp);
+    expect(result?.isExpired).toBe(true);
+  });
+
+  it("should keep listings active when the expiration timestamp is in the future", () => {
+    const futureTimestamp = Math.floor(Date.now() / 1000) + 60;
+    const event = {
+      ...baseEvent,
+      tags: [["expiration", futureTimestamp.toString()]],
+    };
+
+    const result = parseTags(event);
+
+    expect(result?.expiration).toBe(futureTimestamp);
+    expect(result?.isExpired).toBe(false);
+  });
 });
