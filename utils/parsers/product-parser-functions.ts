@@ -33,6 +33,9 @@ export type ProductData = {
   required?: string;
   restrictions?: string;
   pickupLocations?: string[];
+  expiration?: number;
+  isExpired?: boolean;
+  rawEvent?: NostrEvent;
 };
 
 export const parseTags = (productEvent: NostrEvent) => {
@@ -49,7 +52,10 @@ export const parseTags = (productEvent: NostrEvent) => {
     price: 0,
     currency: "",
     totalCost: 0,
+    expiration: undefined,
+    isExpired: false,
   };
+  parsedData.rawEvent = productEvent;
   parsedData.pubkey = productEvent.pubkey;
   parsedData.id = productEvent.id;
   parsedData.createdAt = productEvent.created_at;
@@ -163,11 +169,23 @@ export const parseTags = (productEvent: NostrEvent) => {
           parsedData.pickupLocations = [];
         parsedData.pickupLocations.push(values[0]!);
         break;
+      case "expiration":
+        if (values[0]) {
+          const expirationTimestamp = Number(values[0]);
+          if (!Number.isNaN(expirationTimestamp)) {
+            parsedData.expiration = expirationTimestamp;
+          }
+        }
+        break;
       default:
         return;
     }
   });
   parsedData.totalCost = calculateTotalCost(parsedData);
+  const nowInSeconds = Math.floor(Date.now() / 1000);
+  parsedData.isExpired = parsedData.expiration
+    ? parsedData.expiration <= nowInSeconds
+    : false;
   return parsedData;
 };
 
