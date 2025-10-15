@@ -33,6 +33,7 @@ import { ProductContext } from "@/utils/context/context";
 import { addProductToCache } from "@/utils/nostr/cache-service";
 import { renewListing } from "@/utils/nostr/nostr-helper-functions";
 import { formatDurationCompact, formatDurationLong } from "@/utils/time/countdown";
+import { getListingDurationDefinition } from "@/utils/listings/duration";
 
 interface ProductModalProps {
   productData: ProductData;
@@ -80,6 +81,11 @@ export default function DisplayProductModal({
     () => formatDurationCompact(productData.secondsUntilExpiration),
     [productData.secondsUntilExpiration]
   );
+  const expirationDefinition = useMemo(
+    () => getListingDurationDefinition(productData.expirationDuration),
+    [productData.expirationDuration]
+  );
+  const expirationPolicyLabel = expirationDefinition?.cadenceLabel ?? null;
   const showCountdown = Boolean(countdownLong) && !productData.isExpired;
 
   const handleRenewListing = async () => {
@@ -227,6 +233,16 @@ export default function DisplayProductModal({
                     Listing expires in {countdownLong}
                   </div>
                 )}
+                {expirationPolicyLabel && (
+                  <div className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-purple-700 shadow-sm dark:border-purple-500/40 dark:bg-purple-900/30 dark:text-purple-200">
+                    Refresh cadence: {expirationPolicyLabel}
+                    {expirationDefinition?.cadenceDescription && (
+                      <span className="mt-1 block text-[11px] normal-case text-purple-600 dark:text-purple-200/90">
+                        {expirationDefinition.cadenceDescription}
+                      </span>
+                    )}
+                  </div>
+                )}
                 <div className="text-right">
                   <p className="text-sm font-semibold">Published</p>
                   <p className="text-sm">{publishedDate[0]}</p>
@@ -271,6 +287,16 @@ export default function DisplayProductModal({
                   This listing expired on {expirationDate[0]} at {" "}
                   {expirationDate[1]}. Renew it to make it visible in the
                   marketplace again.
+                  {expirationPolicyLabel && (
+                    <span className="mt-2 block text-xs font-semibold uppercase tracking-wide text-red-500 dark:text-red-300">
+                      Refresh cadence: {expirationPolicyLabel}
+                    </span>
+                  )}
+                  {expirationDefinition?.cadenceDescription && (
+                    <span className="mt-1 block text-xs text-red-500/80 dark:text-red-200/80">
+                      {expirationDefinition.cadenceDescription}
+                    </span>
+                  )}
                 </div>
               )}
               {productData.sizes && productData.sizes.length > 0 ? (

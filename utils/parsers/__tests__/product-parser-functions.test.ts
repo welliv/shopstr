@@ -299,4 +299,26 @@ describe("parseTags", () => {
     expect(result?.expiration).toBe(futureTimestamp);
     expect(result?.isExpired).toBe(false);
   });
+
+  it("should extract the expiration policy when present", () => {
+    const event = {
+      ...baseEvent,
+      tags: [["expiration_policy", "monthly"]],
+    };
+
+    const result = parseTags(event);
+
+    expect(result?.expirationDuration).toBe("monthly");
+  });
+
+  it("should ignore unsupported expiration policies", () => {
+    const event = {
+      ...baseEvent,
+      tags: [["expiration_policy", "quarterly"]],
+    };
+
+    const result = parseTags(event);
+
+    expect(result?.expirationDuration).toBeUndefined();
+  });
 });

@@ -10,19 +10,17 @@ import {
 } from "nostr-tools";
 import { v4 as uuidv4 } from "uuid";
 import CryptoJS from "crypto-js";
-import {
-  Community,
-  CommunityRelays,
-  NostrEvent,
-  ProductFormValues,
-} from "@/utils/types/types";
+import { Community, CommunityRelays, NostrEvent, ProductFormValues } from "@/utils/types/types";
 import { ProductData } from "@/utils/parsers/product-parser-functions";
 import { Proof } from "@cashu/cashu-ts";
 import { NostrSigner } from "@/utils/nostr/signers/nostr-signer";
 import { NostrManager } from "@/utils/nostr/nostr-manager";
 import { removeProductFromCache } from "@/utils/nostr/cache-service";
-
-const LISTING_EXPIRATION_SECONDS = 14 * 24 * 60 * 60;
+import {
+  DEFAULT_LISTING_DURATION,
+  getListingDurationSeconds,
+  isListingDurationOption,
+} from "@/utils/listings/duration";
 
 function containsRelay(relays: string[], relay: string): boolean {
   return relays.some((r) => r.includes(relay));
@@ -142,10 +140,28 @@ export async function PostListing(
     .filter(([key]) => key !== "published_at" && key !== "expiration")
     .map((tag) => [...tag] as [string, ...string[]]);
 
+  const existingDurationTag = sanitizedValues.find(
+    ([key]) => key === "expiration_policy"
+  );
+  const fallbackDuration = DEFAULT_LISTING_DURATION;
+  const maybeDuration = existingDurationTag?.[1];
+  let listingDuration = fallbackDuration;
+
+  if (existingDurationTag) {
+    if (isListingDurationOption(maybeDuration)) {
+      listingDuration = maybeDuration;
+    } else {
+      existingDurationTag[1] = fallbackDuration;
+    }
+  } else {
+    sanitizedValues.push(["expiration_policy", fallbackDuration]);
+  }
+
   const summary = sanitizedValues.find(([key]) => key === "summary")?.[1] || "";
 
   const created_at = Math.floor(Date.now() / 1000);
-  const expiration = created_at + LISTING_EXPIRATION_SECONDS;
+  const durationSeconds = getListingDurationSeconds(listingDuration);
+  const expiration = created_at + durationSeconds;
   const updatedValues: ProductFormValues = [
     ...sanitizedValues,
     ["published_at", String(created_at)],
