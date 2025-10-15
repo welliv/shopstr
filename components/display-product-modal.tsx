@@ -80,6 +80,18 @@ export default function DisplayProductModal({
     () => formatDurationCompact(productData.secondsUntilExpiration),
     [productData.secondsUntilExpiration]
   );
+  const expirationPolicyLabel = useMemo(() => {
+    switch (productData.expirationDuration) {
+      case "weekly":
+        return "Weekly · renew every 7 days";
+      case "bi-weekly":
+        return "Bi-weekly · renew every 14 days";
+      case "monthly":
+        return "Monthly · renew every 30 days";
+      default:
+        return null;
+    }
+  }, [productData.expirationDuration]);
   const showCountdown = Boolean(countdownLong) && !productData.isExpired;
 
   const handleRenewListing = async () => {
@@ -227,6 +239,11 @@ export default function DisplayProductModal({
                     Listing expires in {countdownLong}
                   </div>
                 )}
+                {expirationPolicyLabel && (
+                  <div className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-purple-700 shadow-sm dark:border-purple-500/40 dark:bg-purple-900/30 dark:text-purple-200">
+                    Refresh cadence: {expirationPolicyLabel}
+                  </div>
+                )}
                 <div className="text-right">
                   <p className="text-sm font-semibold">Published</p>
                   <p className="text-sm">{publishedDate[0]}</p>
@@ -271,6 +288,11 @@ export default function DisplayProductModal({
                   This listing expired on {expirationDate[0]} at {" "}
                   {expirationDate[1]}. Renew it to make it visible in the
                   marketplace again.
+                  {expirationPolicyLabel && (
+                    <span className="mt-2 block text-xs font-semibold uppercase tracking-wide text-red-500 dark:text-red-300">
+                      Refresh cadence: {expirationPolicyLabel}
+                    </span>
+                  )}
                 </div>
               )}
               {productData.sizes && productData.sizes.length > 0 ? (

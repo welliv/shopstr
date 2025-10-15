@@ -1,6 +1,9 @@
 import { ShippingOptionsType } from "@/utils/STATIC-VARIABLES";
 import { calculateTotalCost } from "@/components/utility-components/display-monetary-info";
-import { NostrEvent } from "@/utils/types/types";
+import {
+  ListingDurationOption,
+  NostrEvent,
+} from "@/utils/types/types";
 
 export const getExpirationTimestamp = (
   tags?: string[][]
@@ -123,6 +126,7 @@ export type ProductData = {
   expiration?: number;
   isExpired?: boolean;
   secondsUntilExpiration?: number;
+  expirationDuration?: ListingDurationOption;
   rawEvent?: NostrEvent;
 };
 
@@ -142,6 +146,7 @@ export const parseTags = (productEvent: NostrEvent) => {
     totalCost: 0,
     expiration: undefined,
     isExpired: false,
+    expirationDuration: undefined,
   };
   parsedData.rawEvent = productEvent;
   parsedData.pubkey = productEvent.pubkey;
@@ -245,6 +250,11 @@ export const parseTags = (productEvent: NostrEvent) => {
         break;
       case "status":
         parsedData.status = values[0];
+        break;
+      case "expiration_policy":
+        if (values[0]) {
+          parsedData.expirationDuration = values[0] as ListingDurationOption;
+        }
         break;
       case "required":
         parsedData.required = values[0];

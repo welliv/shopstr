@@ -5,6 +5,8 @@ export type ItemType = "products" | "profiles" | "chats" | "communities";
 type ProductFormValue = [key: string, ...values: string[]];
 export type ProductFormValues = ProductFormValue[];
 
+export type ListingDurationOption = "weekly" | "bi-weekly" | "monthly";
+
 export interface NostrEvent extends Event {}
 
 export interface NostrMessageEvent extends NostrEvent {

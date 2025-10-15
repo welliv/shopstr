@@ -47,7 +47,10 @@ import {
   NostrContext,
   SignerContext,
 } from "@/components/utility-components/nostr-context-provider";
-import { ProductFormValues } from "../utils/types/types";
+import {
+  ListingDurationOption,
+  ProductFormValues,
+} from "../utils/types/types";
 import { useTheme } from "next-themes";
 
 interface ProductFormProps {
@@ -110,12 +113,16 @@ export default function ProductForm({
           Status: oldValues.status ? oldValues.status : "",
           Required: oldValues.required ? oldValues.required : "",
           Restrictions: oldValues.restrictions ? oldValues.restrictions : "",
+          "Listing Duration":
+            (oldValues.expirationDuration as ListingDurationOption) ||
+            "bi-weekly",
         }
       : {
           Currency: "SAT",
           "Shipping Option": "N/A",
           Status: "active",
           "Pickup Locations": [""],
+          "Listing Duration": "bi-weekly",
         },
   });
 
@@ -166,6 +173,7 @@ export default function ProductForm({
         data["Shipping Cost"] ? (data["Shipping Cost"] as string) : "0",
         data["Currency"] as string,
       ],
+      ["expiration_policy", data["Listing Duration"] as string],
     ];
 
     images.forEach((image) => {
@@ -275,6 +283,28 @@ export default function ProductForm({
   const currencyOptions = Object.keys(currencySelection).map((code) => ({
     value: code,
   }));
+
+  const listingDurationOptions: Array<{
+    value: ListingDurationOption;
+    title: string;
+    subtitle: string;
+  }> = [
+    {
+      value: "weekly",
+      title: "Weekly",
+      subtitle: "Great for fast-moving, limited drops.",
+    },
+    {
+      value: "bi-weekly",
+      title: "Bi-weekly",
+      subtitle: "Stay aligned with Shopstr's 14-day refresh cadence.",
+    },
+    {
+      value: "monthly",
+      title: "Monthly",
+      subtitle: "Perfect for evergreen inventory you revisit monthly.",
+    },
+  ];
 
   return (
     <Modal
@@ -805,6 +835,74 @@ export default function ProductForm({
                 />
               </div>
             )}
+
+            <Controller
+              name="Listing Duration"
+              control={control}
+              render={({ field: { value, onChange } }) => {
+                const selectedOption = listingDurationOptions.find(
+                  (option) => option.value === value
+                );
+
+                return (
+                  <div className="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-sm transition-all dark:border-zinc-700 dark:bg-zinc-900/60">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold uppercase tracking-wide text-light-text dark:text-dark-text">
+                          Listing duration
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Decide how long this listing stays live before you republish it.
+                        </p>
+                      </div>
+                      {selectedOption && (
+                        <Chip
+                          variant="flat"
+                          color="secondary"
+                          className="self-start uppercase tracking-wide"
+                          size="sm"
+                        >
+                          {selectedOption.title}
+                        </Chip>
+                      )}
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      {listingDurationOptions.map((option) => {
+                        const isActive = option.value === value;
+                        const optionClasses = isActive
+                          ? "border-shopstr-purple-light bg-shopstr-purple-light/10 text-shopstr-purple-light shadow-lg shadow-shopstr-purple-light/30 dark:border-shopstr-yellow-light dark:bg-shopstr-yellow-light/10 dark:text-shopstr-yellow-light dark:shadow-shopstr-yellow-light/30"
+                          : "border-gray-200 bg-white/70 text-light-text hover:border-shopstr-purple-light/60 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-dark-text dark:hover:border-shopstr-yellow-light/60";
+
+                        return (
+                          <button
+                            type="button"
+                            key={option.value}
+                            className={`group flex h-full flex-col justify-between rounded-xl border p-4 text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-shopstr-purple-light focus-visible:ring-offset-2 dark:focus-visible:ring-shopstr-yellow-light ${optionClasses}`}
+                            onClick={() => onChange(option.value)}
+                          >
+                            <span className="text-base font-semibold">
+                              {option.title}
+                            </span>
+                            <span className="mt-2 text-sm text-gray-600 transition-colors group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-200">
+                              {option.subtitle}
+                            </span>
+                            <span className="mt-3 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                              {isActive ? "Selected" : "Select"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
+                      Expired listings quietly leave the marketplace until you republish
+                      them—keep things fresh by renewing after {selectedOption?.title?.toLowerCase() || "your chosen"} cadence.
+                    </p>
+                  </div>
+                );
+              }}
+            />
             <Controller
               name="Category"
               control={control}
