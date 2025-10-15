@@ -10,19 +10,18 @@ import {
 } from "nostr-tools";
 import { v4 as uuidv4 } from "uuid";
 import CryptoJS from "crypto-js";
-import {
-  Community,
-  CommunityRelays,
-  NostrEvent,
-  ProductFormValues,
-} from "@/utils/types/types";
+import { Community, CommunityRelays, NostrEvent, ProductFormValues } from "@/utils/types/types";
 import { ProductData } from "@/utils/parsers/product-parser-functions";
 import { Proof } from "@cashu/cashu-ts";
 import { NostrSigner } from "@/utils/nostr/signers/nostr-signer";
 import { NostrManager } from "@/utils/nostr/nostr-manager";
 import { removeProductFromCache } from "@/utils/nostr/cache-service";
-
-const LISTING_EXPIRATION_SECONDS = 14 * 24 * 60 * 60;
+import {
+  DEFAULT_LISTING_DURATION,
+  buildExpirationPolicyTag,
+  ensureListingDurationPolicy,
+  getListingDurationSeconds,
+} from "@/utils/listings/duration";
 
 function containsRelay(relays: string[], relay: string): boolean {
   return relays.some((r) => r.includes(relay));
@@ -142,10 +141,27 @@ export async function PostListing(
     .filter(([key]) => key !== "published_at" && key !== "expiration")
     .map((tag) => [...tag] as [string, ...string[]]);
 
+  const existingDurationIndex = sanitizedValues.findIndex(
+    ([key]) => key === "expiration_policy"
+  );
+  let listingDurationPolicy = DEFAULT_LISTING_DURATION;
+
+  if (existingDurationIndex >= 0) {
+    const [, ...rawValues] = sanitizedValues[existingDurationIndex];
+    listingDurationPolicy = ensureListingDurationPolicy(rawValues);
+    sanitizedValues[existingDurationIndex] = buildExpirationPolicyTag(
+      listingDurationPolicy
+    );
+  } else {
+    listingDurationPolicy = DEFAULT_LISTING_DURATION;
+    sanitizedValues.push(buildExpirationPolicyTag(listingDurationPolicy));
+  }
+
   const summary = sanitizedValues.find(([key]) => key === "summary")?.[1] || "";
 
   const created_at = Math.floor(Date.now() / 1000);
-  const expiration = created_at + LISTING_EXPIRATION_SECONDS;
+  const durationSeconds = getListingDurationSeconds(listingDurationPolicy);
+  const expiration = created_at + durationSeconds;
   const updatedValues: ProductFormValues = [
     ...sanitizedValues,
     ["published_at", String(created_at)],

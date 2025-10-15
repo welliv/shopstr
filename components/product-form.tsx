@@ -47,7 +47,25 @@ import {
   NostrContext,
   SignerContext,
 } from "@/components/utility-components/nostr-context-provider";
-import { ProductFormValues } from "../utils/types/types";
+import {
+  ListingDurationOption,
+  ListingDurationPolicy,
+  ProductFormValues,
+} from "@/utils/types/types";
+import {
+  DEFAULT_CUSTOM_DURATION_SECONDS,
+  DEFAULT_LISTING_DURATION,
+  LISTING_DURATION_DEFINITIONS,
+  MAX_CUSTOM_DURATION_DAYS,
+  buildExpirationPolicyTag,
+  convertDaysHoursToSeconds,
+  formatCustomDurationDescription,
+  formatCustomDurationLabel,
+  getListingDurationDefinition,
+  isListingDurationOption,
+  normalizeCustomDurationSeconds,
+  splitCustomDuration,
+} from "@/utils/listings/duration";
 import { useTheme } from "next-themes";
 
 interface ProductFormProps {
@@ -76,6 +94,9 @@ export default function ProductForm({
   const [isPostingOrUpdatingProduct, setIsPostingOrUpdatingProduct] =
     useState(false);
   const [showOptionalTags, setShowOptionalTags] = useState(false);
+  const [customDurationError, setCustomDurationError] = useState<string | null>(
+    null
+  );
   const productEventContext = useContext(ProductContext);
   const profileContext = useContext(ProfileMapContext);
   const {
@@ -85,7 +106,22 @@ export default function ProductForm({
   } = useContext(SignerContext);
   const { nostr } = useContext(NostrContext);
 
-  const { handleSubmit, control, reset, watch } = useForm({
+  const defaultListingOption =
+    oldValues && isListingDurationOption(oldValues.expirationDuration)
+      ? oldValues.expirationDuration
+      : DEFAULT_LISTING_DURATION.option;
+
+  const fallbackCustomSeconds = DEFAULT_CUSTOM_DURATION_SECONDS;
+  const initialCustomSeconds =
+    oldValues?.expirationDuration === "custom"
+      ? normalizeCustomDurationSeconds(oldValues.expirationCustomSeconds) ??
+        fallbackCustomSeconds
+      : fallbackCustomSeconds;
+
+  const { days: initialCustomDays, hours: initialCustomHours } =
+    splitCustomDuration(initialCustomSeconds);
+
+  const { handleSubmit, control, reset, watch, setValue } = useForm({
     defaultValues: oldValues
       ? {
           "Product Name": oldValues.title,
@@ -110,12 +146,18 @@ export default function ProductForm({
           Status: oldValues.status ? oldValues.status : "",
           Required: oldValues.required ? oldValues.required : "",
           Restrictions: oldValues.restrictions ? oldValues.restrictions : "",
+          "Listing Duration": defaultListingOption,
+          "Custom Duration Days": initialCustomDays,
+          "Custom Duration Hours": initialCustomHours,
         }
       : {
           Currency: "SAT",
           "Shipping Option": "N/A",
           Status: "active",
           "Pickup Locations": [""],
+          "Listing Duration": DEFAULT_LISTING_DURATION.option,
+          "Custom Duration Days": initialCustomDays,
+          "Custom Duration Hours": initialCustomHours,
         },
   });
 
@@ -132,6 +174,52 @@ export default function ProductForm({
     setIsEdit(oldValues ? true : false);
   }, [showModal]);
 
+  const selectedListingDuration = watch("Listing Duration");
+  const watchedCustomDays = Number(watch("Custom Duration Days") ?? 0);
+  const watchedCustomHours = Number(watch("Custom Duration Hours") ?? 0);
+  const rawCustomSeconds = convertDaysHoursToSeconds(
+    watchedCustomDays,
+    watchedCustomHours
+  );
+  const normalizedCustomSeconds = normalizeCustomDurationSeconds(
+    rawCustomSeconds
+  );
+  const customDurationLabel = formatCustomDurationLabel(
+    normalizedCustomSeconds
+  );
+  const customDurationDescription = formatCustomDurationDescription(
+    normalizedCustomSeconds
+  );
+
+  useEffect(() => {
+    if (selectedListingDuration !== "custom" && customDurationError) {
+      setCustomDurationError(null);
+    }
+
+    if (selectedListingDuration === "custom" && normalizedCustomSeconds) {
+      setCustomDurationError(null);
+    }
+  }, [
+    selectedListingDuration,
+    normalizedCustomSeconds,
+    customDurationError,
+  ]);
+
+  useEffect(() => {
+    if (
+      selectedListingDuration === "custom" &&
+      watchedCustomDays >= MAX_CUSTOM_DURATION_DAYS &&
+      watchedCustomHours > 0
+    ) {
+      setValue("Custom Duration Hours", 0, { shouldDirty: true });
+    }
+  }, [
+    selectedListingDuration,
+    watchedCustomDays,
+    watchedCustomHours,
+    setValue,
+  ]);
+
   const onSubmit = async (data: {
     [x: string]: string | Map<string, number> | string[];
   }) => {
@@ -146,6 +234,44 @@ export default function ProductForm({
     const hashHex = CryptoJS.SHA256(data["Product Name"] as string).toString(
       CryptoJS.enc.Hex
     );
+
+    const listingDurationOption = isListingDurationOption(
+      data["Listing Duration"] as string
+    )
+      ? (data["Listing Duration"] as ListingDurationOption)
+      : DEFAULT_LISTING_DURATION.option;
+
+    const customDaysInput = Number(data["Custom Duration Days"] ?? 0);
+    const customHoursInput = Number(data["Custom Duration Hours"] ?? 0);
+    const requestedCustomSeconds = convertDaysHoursToSeconds(
+      customDaysInput,
+      customHoursInput
+    );
+
+    let expirationPolicy: ListingDurationPolicy = {
+      option: listingDurationOption,
+    };
+
+    if (listingDurationOption === "custom") {
+      const normalizedSeconds = normalizeCustomDurationSeconds(
+        requestedCustomSeconds
+      );
+
+      if (!normalizedSeconds) {
+        setCustomDurationError(
+          "Choose at least one hour (and no more than six days) for your custom cadence."
+        );
+        setIsPostingOrUpdatingProduct(false);
+        return;
+      }
+
+      expirationPolicy = {
+        option: "custom",
+        customSeconds: normalizedSeconds,
+      };
+    }
+
+    const expirationPolicyTag = buildExpirationPolicyTag(expirationPolicy);
 
     const tags: ProductFormValues = [
       ["d", oldValues?.d || hashHex],
@@ -166,13 +292,24 @@ export default function ProductForm({
         data["Shipping Cost"] ? (data["Shipping Cost"] as string) : "0",
         data["Currency"] as string,
       ],
+      expirationPolicyTag,
     ];
 
     images.forEach((image) => {
       tags.push(["image", image]);
     });
 
-    (data["Category"] as string).split(",").forEach((category) => {
+    const rawCategories = (data["Category"] as string) || "";
+    const uniqueCategories = Array.from(
+      new Set(
+        rawCategories
+          .split(",")
+          .map((category) => category.trim())
+          .filter(Boolean)
+      )
+    );
+
+    uniqueCategories.forEach((category) => {
       tags.push(["t", category]);
     });
     tags.push(["t", "shopstr"]);
@@ -255,6 +392,7 @@ export default function ProductForm({
     setImages([]);
     reset();
     setCurrentSlide(0);
+    setCustomDurationError(null);
   };
 
   const watchShippingOption = watch("Shipping Option");
@@ -805,6 +943,194 @@ export default function ProductForm({
                 />
               </div>
             )}
+
+            <Controller
+              name="Listing Duration"
+              control={control}
+              render={({ field: { value, onChange } }) => {
+                const selectedOption = getListingDurationDefinition(
+                  isListingDurationOption(value) ? value : undefined
+                );
+                const isCustomSelected = value === "custom";
+                const chipLabel = isCustomSelected
+                  ? normalizedCustomSeconds
+                    ? customDurationLabel
+                    : "Custom cadence"
+                  : selectedOption?.title;
+                const supportingCopy = isCustomSelected
+                  ? customDurationDescription
+                  : selectedOption?.cadenceDescription ||
+                    "Expired listings quietly leave the marketplace until you republish them—choose the rhythm that suits your brand.";
+
+                const baseCardClasses =
+                  "group flex h-full flex-col justify-between rounded-xl border p-4 text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-shopstr-purple-light focus-visible:ring-offset-2 dark:focus-visible:ring-shopstr-yellow-light";
+                const activeClasses =
+                  "border-shopstr-purple-light bg-shopstr-purple-light/10 text-shopstr-purple-light shadow-lg shadow-shopstr-purple-light/30 dark:border-shopstr-yellow-light dark:bg-shopstr-yellow-light/10 dark:text-shopstr-yellow-light dark:shadow-shopstr-yellow-light/30";
+                const inactiveClasses =
+                  "border-gray-200 bg-white/70 text-light-text hover:border-shopstr-purple-light/60 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-dark-text dark:hover:border-shopstr-yellow-light/60";
+
+                return (
+                  <div className="rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-sm transition-all dark:border-zinc-700 dark:bg-zinc-900/60">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold uppercase tracking-wide text-light-text dark:text-dark-text">
+                          Listing duration
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Decide how long this listing stays live before you republish it.
+                        </p>
+                      </div>
+                      {chipLabel && (
+                        <Chip
+                          variant="flat"
+                          color="secondary"
+                          className="self-start uppercase tracking-wide"
+                          size="sm"
+                        >
+                          {chipLabel}
+                        </Chip>
+                      )}
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      {LISTING_DURATION_DEFINITIONS.map((option) => {
+                        const isActive = option.value === value;
+                        const optionClasses = `${baseCardClasses} ${
+                          isActive ? activeClasses : inactiveClasses
+                        }`;
+
+                        return (
+                          <button
+                            type="button"
+                            key={option.value}
+                            className={optionClasses}
+                            onClick={() => onChange(option.value)}
+                          >
+                            <span className="text-base font-semibold">
+                              {option.title}
+                            </span>
+                            <span className="mt-2 text-sm text-gray-600 transition-colors group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-200">
+                              {option.subtitle}
+                            </span>
+                            <span className="mt-3 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                              {isActive ? "Selected" : "Select"}
+                            </span>
+                          </button>
+                        );
+                      })}
+
+                      <div
+                        className={`${baseCardClasses} ${
+                          isCustomSelected ? activeClasses : inactiveClasses
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          className="text-left"
+                          onClick={() => onChange("custom")}
+                        >
+                          <span className="text-base font-semibold">
+                            Tailored cadence
+                          </span>
+                          <span className="mt-2 block text-sm text-gray-600 transition-colors group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-200">
+                            Compose a made-to-measure window—anywhere up to six days.
+                          </span>
+                          <span className="mt-3 block text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                            {isCustomSelected ? "Selected" : "Select"}
+                          </span>
+                        </button>
+
+                        {isCustomSelected && (
+                          <div className="mt-4 space-y-4">
+                            <p className="text-sm text-gray-600 dark:text-gray-300">
+                              Fine-tune the lifespan of this drop. When it lapses, it will gracefully leave the floor until you relist it.
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                              <Controller
+                                name="Custom Duration Days"
+                                control={control}
+                                render={({ field }) => (
+                                  <Input
+                                    type="number"
+                                    label="Days"
+                                    labelPlacement="outside"
+                                    min={0}
+                                    max={MAX_CUSTOM_DURATION_DAYS}
+                                    value={String(field.value ?? 0)}
+                                    onChange={(event) => {
+                                      const rawValue = Number(event.target.value);
+                                      const clampedValue = Math.max(
+                                        0,
+                                        Math.min(
+                                          MAX_CUSTOM_DURATION_DAYS,
+                                          Number.isNaN(rawValue) ? 0 : Math.floor(rawValue)
+                                        )
+                                      );
+                                      field.onChange(clampedValue);
+                                      if (clampedValue >= MAX_CUSTOM_DURATION_DAYS) {
+                                        setValue("Custom Duration Hours", 0, {
+                                          shouldDirty: true,
+                                        });
+                                      }
+                                    }}
+                                  />
+                                )}
+                              />
+                              <Controller
+                                name="Custom Duration Hours"
+                                control={control}
+                                render={({ field }) => {
+                                  const isMaxDay =
+                                    watchedCustomDays >= MAX_CUSTOM_DURATION_DAYS;
+                                  const maxHours = isMaxDay ? 0 : 23;
+
+                                  return (
+                                    <Input
+                                      type="number"
+                                      label="Hours"
+                                      labelPlacement="outside"
+                                      min={0}
+                                      max={maxHours}
+                                      disabled={isMaxDay}
+                                      value={String(field.value ?? 0)}
+                                      onChange={(event) => {
+                                        const rawValue = Number(event.target.value);
+                                        const clampedValue = Math.max(
+                                          0,
+                                          Math.min(
+                                            maxHours,
+                                            Number.isNaN(rawValue)
+                                              ? 0
+                                              : Math.floor(rawValue)
+                                          )
+                                        );
+                                        field.onChange(clampedValue);
+                                      }}
+                                    />
+                                  );
+                                }}
+                              />
+                            </div>
+                            {customDurationError && (
+                              <p className="text-sm text-rose-500 dark:text-rose-300">
+                                {customDurationError}
+                              </p>
+                            )}
+                            <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                              {customDurationLabel}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
+                      {supportingCopy}
+                    </p>
+                  </div>
+                );
+              }}
+            />
             <Controller
               name="Category"
               control={control}

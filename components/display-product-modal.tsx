@@ -33,6 +33,11 @@ import { ProductContext } from "@/utils/context/context";
 import { addProductToCache } from "@/utils/nostr/cache-service";
 import { renewListing } from "@/utils/nostr/nostr-helper-functions";
 import { formatDurationCompact, formatDurationLong } from "@/utils/time/countdown";
+import {
+  formatCustomDurationDescription,
+  formatCustomDurationLabel,
+  getListingDurationDefinition,
+} from "@/utils/listings/duration";
 
 interface ProductModalProps {
   productData: ProductData;
@@ -80,6 +85,42 @@ export default function DisplayProductModal({
     () => formatDurationCompact(productData.secondsUntilExpiration),
     [productData.secondsUntilExpiration]
   );
+  const expirationPolicy = useMemo(() => {
+    if (!productData.expirationDuration) return null;
+    return {
+      option: productData.expirationDuration,
+      customSeconds: productData.expirationCustomSeconds,
+    } as const;
+  }, [
+    productData.expirationDuration,
+    productData.expirationCustomSeconds,
+  ]);
+
+  const expirationPolicyLabel = useMemo(() => {
+    if (!expirationPolicy) return null;
+
+    if (expirationPolicy.option === "custom") {
+      return formatCustomDurationLabel(expirationPolicy.customSeconds);
+    }
+
+    return (
+      getListingDurationDefinition(expirationPolicy.option)?.cadenceLabel ??
+      null
+    );
+  }, [expirationPolicy]);
+
+  const expirationPolicyDescription = useMemo(() => {
+    if (!expirationPolicy) return null;
+
+    if (expirationPolicy.option === "custom") {
+      return formatCustomDurationDescription(expirationPolicy.customSeconds);
+    }
+
+    return (
+      getListingDurationDefinition(expirationPolicy.option)
+        ?.cadenceDescription ?? null
+    );
+  }, [expirationPolicy]);
   const showCountdown = Boolean(countdownLong) && !productData.isExpired;
 
   const handleRenewListing = async () => {
@@ -227,6 +268,16 @@ export default function DisplayProductModal({
                     Listing expires in {countdownLong}
                   </div>
                 )}
+                {expirationPolicyLabel && (
+                  <div className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-purple-700 shadow-sm dark:border-purple-500/40 dark:bg-purple-900/30 dark:text-purple-200">
+                    Refresh cadence: {expirationPolicyLabel}
+                    {expirationPolicyDescription && (
+                      <span className="mt-1 block text-[11px] normal-case text-purple-600 dark:text-purple-200/90">
+                        {expirationPolicyDescription}
+                      </span>
+                    )}
+                  </div>
+                )}
                 <div className="text-right">
                   <p className="text-sm font-semibold">Published</p>
                   <p className="text-sm">{publishedDate[0]}</p>
@@ -266,13 +317,23 @@ export default function DisplayProductModal({
               <span className="whitespace-break-spaces break-all">
                 {productData.summary}
               </span>
-              {productData.isExpired && expirationDate && (
-                <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-                  This listing expired on {expirationDate[0]} at {" "}
-                  {expirationDate[1]}. Renew it to make it visible in the
-                  marketplace again.
-                </div>
-              )}
+                {productData.isExpired && expirationDate && (
+                  <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                    This listing expired on {expirationDate[0]} at {" "}
+                    {expirationDate[1]}. Renew it to make it visible in the
+                    marketplace again.
+                    {expirationPolicyLabel && (
+                      <span className="mt-2 block text-xs font-semibold uppercase tracking-wide text-red-500 dark:text-red-300">
+                        Refresh cadence: {expirationPolicyLabel}
+                      </span>
+                    )}
+                    {expirationPolicyDescription && (
+                      <span className="mt-1 block text-xs text-red-500/80 dark:text-red-200/80">
+                        {expirationPolicyDescription}
+                      </span>
+                    )}
+                  </div>
+                )}
               {productData.sizes && productData.sizes.length > 0 ? (
               <>
                 <span className="text-xl font-semibold">Sizes: </span>

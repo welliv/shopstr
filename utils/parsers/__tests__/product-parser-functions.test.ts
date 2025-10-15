@@ -299,4 +299,53 @@ describe("parseTags", () => {
     expect(result?.expiration).toBe(futureTimestamp);
     expect(result?.isExpired).toBe(false);
   });
+
+  it("should extract the expiration policy when present", () => {
+    const event = {
+      ...baseEvent,
+      tags: [["expiration_policy", "monthly"]],
+    };
+
+    const result = parseTags(event);
+
+    expect(result?.expirationDuration).toBe("monthly");
+    expect(result?.expirationCustomSeconds).toBeUndefined();
+  });
+
+  it("should ignore unsupported expiration policies", () => {
+    const event = {
+      ...baseEvent,
+      tags: [["expiration_policy", "quarterly"]],
+    };
+
+    const result = parseTags(event);
+
+    expect(result?.expirationDuration).toBeUndefined();
+    expect(result?.expirationCustomSeconds).toBeUndefined();
+  });
+
+  it("should capture custom expiration policies with their duration", () => {
+    const threeDaysInSeconds = 3 * 24 * 60 * 60;
+    const event = {
+      ...baseEvent,
+      tags: [["expiration_policy", "custom", String(threeDaysInSeconds)]],
+    };
+
+    const result = parseTags(event);
+
+    expect(result?.expirationDuration).toBe("custom");
+    expect(result?.expirationCustomSeconds).toBe(threeDaysInSeconds);
+  });
+
+  it("should discard custom expiration policies when the duration is invalid", () => {
+    const event = {
+      ...baseEvent,
+      tags: [["expiration_policy", "custom", "0"]],
+    };
+
+    const result = parseTags(event);
+
+    expect(result?.expirationDuration).toBe("custom");
+    expect(result?.expirationCustomSeconds).toBeUndefined();
+  });
 });
