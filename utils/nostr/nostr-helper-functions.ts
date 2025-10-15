@@ -22,6 +22,8 @@ import { NostrSigner } from "@/utils/nostr/signers/nostr-signer";
 import { NostrManager } from "@/utils/nostr/nostr-manager";
 import { removeProductFromCache } from "@/utils/nostr/cache-service";
 
+const LISTING_EXPIRATION_SECONDS = 14 * 24 * 60 * 60;
+
 function containsRelay(relays: string[], relay: string): boolean {
   return relays.some((r) => r.includes(relay));
 }
@@ -136,10 +138,19 @@ export async function PostListing(
 
   if (!nostr) throw new Error("Nostr writer required");
 
-  const summary = values.find(([key]) => key === "summary")?.[1] || "";
+  const sanitizedValues: ProductFormValues = values
+    .filter(([key]) => key !== "published_at" && key !== "expiration")
+    .map((tag) => [...tag] as [string, ...string[]]);
+
+  const summary = sanitizedValues.find(([key]) => key === "summary")?.[1] || "";
 
   const created_at = Math.floor(Date.now() / 1000);
-  const updatedValues = [...values, ["published_at", String(created_at)]];
+  const expiration = created_at + LISTING_EXPIRATION_SECONDS;
+  const updatedValues: ProductFormValues = [
+    ...sanitizedValues,
+    ["published_at", String(created_at)],
+    ["expiration", String(expiration)],
+  ];
 
   const event = {
     created_at: created_at,
@@ -151,7 +162,7 @@ export async function PostListing(
   const handlerDTag = uuidv4();
 
   const origin =
-    window && typeof window !== undefined
+    typeof window !== "undefined"
       ? window.location.origin
       : "https://shopstr.store";
 
@@ -187,6 +198,19 @@ export async function PostListing(
   await nostr.publish(signedHandlerEvent, allWriteRelays);
 
   return signedEvent;
+}
+
+export async function renewListing(
+  productEvent: NostrEvent,
+  signer: NostrSigner,
+  isLoggedIn: boolean,
+  nostr: NostrManager
+) {
+  const tagsToRepublish: ProductFormValues = productEvent.tags
+    .filter(([key]) => key !== "expiration" && key !== "published_at")
+    .map((tag) => [...tag] as [string, ...string[]]);
+
+  return PostListing(tagsToRepublish, signer, isLoggedIn, nostr);
 }
 
 export async function createNostrShopEvent(

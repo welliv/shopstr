@@ -3,6 +3,7 @@ import {
   PencilSquareIcon,
   ShareIcon,
   TrashIcon,
+  ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 import {
   Modal,
@@ -22,9 +23,15 @@ import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 import ConfirmActionDropdown from "./utility-components/dropdowns/confirm-action-dropdown";
 import { ProfileWithDropdown } from "./utility-components/profile/profile-dropdown";
 import SuccessModal from "./utility-components/success-modal";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import {
+  NostrContext,
+  SignerContext,
+} from "@/components/utility-components/nostr-context-provider";
 import { nip19 } from "nostr-tools";
 import { ProductData } from "@/utils/parsers/product-parser-functions";
+import { ProductContext } from "@/utils/context/context";
+import { addProductToCache } from "@/utils/nostr/cache-service";
+import { renewListing } from "@/utils/nostr/nostr-helper-functions";
 
 interface ProductModalProps {
   productData: ProductData;
@@ -39,11 +46,18 @@ export default function DisplayProductModal({
   handleModalToggle,
   handleDelete,
 }: ProductModalProps) {
-  const { pubkey: userPubkey, isLoggedIn } = useContext(SignerContext);
+  const { pubkey: userPubkey, isLoggedIn, signer } = useContext(SignerContext);
+  const { nostr } = useContext(NostrContext);
+  const productEventContext = useContext(ProductContext);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalMessage, setSuccessModalMessage] = useState(
+    "Listing URL copied to clipboard!"
+  );
+  const [renewLoading, setRenewLoading] = useState(false);
+  const [renewError, setRenewError] = useState<string | null>(null);
 
   const displayDate = (timestamp: number): [string, string] => {
     if (timestamp == 0 || !timestamp) return ["", ""];
@@ -51,6 +65,45 @@ export default function DisplayProductModal({
     const dateString = d.toLocaleString().split(",")[0]!.trim();
     const timeString = d.toLocaleString().split(",")[1]!.trim();
     return [dateString, timeString];
+  };
+
+  const publishedDate = displayDate(productData.createdAt);
+  const expirationDate = productData.expiration
+    ? displayDate(productData.expiration)
+    : null;
+
+  const handleRenewListing = async () => {
+    if (!productData.rawEvent) {
+      setRenewError(
+        "Unable to renew because the original listing event is unavailable."
+      );
+      return;
+    }
+
+    if (!signer || !nostr || !isLoggedIn) {
+      setRenewError("You must be signed in to renew this listing.");
+      return;
+    }
+
+    try {
+      setRenewLoading(true);
+      setRenewError(null);
+      const renewedEvent = await renewListing(
+        productData.rawEvent,
+        signer,
+        isLoggedIn,
+        nostr
+      );
+      productEventContext.addNewlyCreatedProductEvent(renewedEvent);
+      await addProductToCache(renewedEvent);
+      setSuccessModalMessage("Listing renewed successfully!");
+      setShowSuccessModal(true);
+    } catch (error) {
+      console.error("Failed to renew listing", error);
+      setRenewError("Something went wrong while renewing. Please try again.");
+    } finally {
+      setRenewLoading(false);
+    }
   };
 
   const handleShare = async () => {
@@ -73,6 +126,7 @@ export default function DisplayProductModal({
       navigator.clipboard.writeText(
         `${window.location.origin}/listing/${naddr}`
       );
+      setSuccessModalMessage("Listing URL copied to clipboard!");
       setShowSuccessModal(true);
     }
   };
@@ -142,37 +196,64 @@ export default function DisplayProductModal({
               />
             ) : null}
             <Divider />
-            <div className="flex h-fit w-full flex-row flex-wrap items-center justify-between gap-2">
-              <ProfileWithDropdown
-                pubkey={productData.pubkey}
-                dropDownKeys={
-                  productData.pubkey === userPubkey
-                    ? ["shop_profile"]
-                    : ["shop", "inquiry", "copy_npub"]
-                }
-              />
-              <Chip
-                key={productData.location}
-                startContent={locationAvatar(productData.location)}
-              >
-                {productData.location}
-              </Chip>
-              <CompactCategories categories={productData.categories} />
-              <div>
-                <p className="text-md">
-                  {displayDate(productData.createdAt)[0]}
-                </p>
-                <p className="text-md">
-                  {displayDate(productData.createdAt)[1]}
-                </p>
+              <div className="flex h-fit w-full flex-row flex-wrap items-center justify-between gap-2">
+                <ProfileWithDropdown
+                  pubkey={productData.pubkey}
+                  dropDownKeys={
+                    productData.pubkey === userPubkey
+                      ? ["shop_profile"]
+                      : ["shop", "inquiry", "copy_npub"]
+                  }
+                />
+                <Chip
+                  key={productData.location}
+                  startContent={locationAvatar(productData.location)}
+                >
+                  {productData.location}
+                </Chip>
+                <CompactCategories categories={productData.categories} />
+                <div className="text-right">
+                  <p className="text-sm font-semibold">Published</p>
+                  <p className="text-sm">{publishedDate[0]}</p>
+                  <p className="text-sm">{publishedDate[1]}</p>
+                </div>
+                {expirationDate && (
+                  <div className="text-right">
+                    <p className="text-sm font-semibold">Expires</p>
+                    <p
+                      className={`text-sm ${
+                        productData.isExpired
+                          ? "text-red-500 dark:text-red-300"
+                          : ""
+                      }`}
+                    >
+                      {expirationDate[0]}
+                    </p>
+                    <p
+                      className={`text-sm ${
+                        productData.isExpired
+                          ? "text-red-500 dark:text-red-300"
+                          : ""
+                      }`}
+                    >
+                      {expirationDate[1]}
+                    </p>
+                  </div>
+                )}
               </div>
-            </div>
-            <Divider />
-            <span className="text-xl font-semibold">Summary: </span>
-            <span className="whitespace-break-spaces break-all">
-              {productData.summary}
-            </span>
-            {productData.sizes && productData.sizes.length > 0 ? (
+              <Divider />
+              <span className="text-xl font-semibold">Summary: </span>
+              <span className="whitespace-break-spaces break-all">
+                {productData.summary}
+              </span>
+              {productData.isExpired && expirationDate && (
+                <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                  This listing expired on {expirationDate[0]} at {" "}
+                  {expirationDate[1]}. Renew it to make it visible in the
+                  marketplace again.
+                </div>
+              )}
+              {productData.sizes && productData.sizes.length > 0 ? (
               <>
                 <span className="text-xl font-semibold">Sizes: </span>
                 <div className="flex flex-wrap items-center">
@@ -261,6 +342,20 @@ export default function DisplayProductModal({
               </Button>
               {userPubkey === productData.pubkey && (
                 <>
+                  {productData.isExpired && (
+                    <Button
+                      type="button"
+                      className={SHOPSTRBUTTONCLASSNAMES}
+                      startContent={
+                        <ArrowPathIcon className="h-6 w-6 hover:text-yellow-500" />
+                      }
+                      onClick={handleRenewListing}
+                      isDisabled={renewLoading}
+                      isLoading={renewLoading}
+                    >
+                      Renew Listing
+                    </Button>
+                  )}
                   <Button
                     type="submit"
                     className={SHOPSTRBUTTONCLASSNAMES}
@@ -291,6 +386,11 @@ export default function DisplayProductModal({
                 </>
               )}
             </div>
+            {renewError && (
+              <p className="w-full text-center text-sm text-red-500 dark:text-red-300">
+                {renewError}
+              </p>
+            )}
           </ModalFooter>
         </ModalContent>
       </Modal>
@@ -304,7 +404,7 @@ export default function DisplayProductModal({
         />
       )}
       <SuccessModal
-        bodyText="Listing URL copied to clipboard!"
+        bodyText={successModalMessage}
         isOpen={showSuccessModal}
         onClose={() => setShowSuccessModal(false)}
       />

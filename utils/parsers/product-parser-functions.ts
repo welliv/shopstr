@@ -2,6 +2,47 @@ import { ShippingOptionsType } from "@/utils/STATIC-VARIABLES";
 import { calculateTotalCost } from "@/components/utility-components/display-monetary-info";
 import { NostrEvent } from "@/utils/types/types";
 
+export const getExpirationTimestamp = (
+  tags?: string[][]
+): number | undefined => {
+  if (!tags) return undefined;
+
+  for (const tag of tags) {
+    if (tag[0] !== "expiration") continue;
+    const value = tag[1];
+    if (!value) continue;
+
+    const timestamp = Number(value);
+    if (!Number.isNaN(timestamp)) {
+      return timestamp;
+    }
+  }
+
+  return undefined;
+};
+
+export const isExpiredAtReference = (
+  expiration?: number,
+  referenceTime: number = Math.floor(Date.now() / 1000)
+): boolean => {
+  if (typeof expiration !== "number") {
+    return false;
+  }
+
+  return expiration <= referenceTime;
+};
+
+export const getProductExpirationStatus = (
+  productEvent: Pick<NostrEvent, "tags">,
+  referenceTime: number = Math.floor(Date.now() / 1000)
+) => {
+  const expiration = getExpirationTimestamp(productEvent.tags);
+  return {
+    expiration,
+    isExpired: isExpiredAtReference(expiration, referenceTime),
+  };
+};
+
 export type ProductData = {
   id: string;
   pubkey: string;
@@ -33,6 +74,9 @@ export type ProductData = {
   required?: string;
   restrictions?: string;
   pickupLocations?: string[];
+  expiration?: number;
+  isExpired?: boolean;
+  rawEvent?: NostrEvent;
 };
 
 export const parseTags = (productEvent: NostrEvent) => {
@@ -49,7 +93,10 @@ export const parseTags = (productEvent: NostrEvent) => {
     price: 0,
     currency: "",
     totalCost: 0,
+    expiration: undefined,
+    isExpired: false,
   };
+  parsedData.rawEvent = productEvent;
   parsedData.pubkey = productEvent.pubkey;
   parsedData.id = productEvent.id;
   parsedData.createdAt = productEvent.created_at;
@@ -168,6 +215,9 @@ export const parseTags = (productEvent: NostrEvent) => {
     }
   });
   parsedData.totalCost = calculateTotalCost(parsedData);
+  const { expiration, isExpired } = getProductExpirationStatus(productEvent);
+  parsedData.expiration = expiration;
+  parsedData.isExpired = isExpired;
   return parsedData;
 };
 
