@@ -26,6 +26,7 @@ import {
 import {
   ProductData,
   parseTags,
+  getProductExpirationStatus,
 } from "@/utils/parsers/product-parser-functions";
 import { parseCommunityEvent } from "../parsers/community-parser-functions";
 import { calculateWeightedScore } from "@/utils/parsers/review-parser-functions";
@@ -86,11 +87,20 @@ export const fetchAllPosts = async (
         if (!event || !event.id) continue;
 
         productArrayFromRelay.push(event);
+
+        const { isExpired } = getProductExpirationStatus(event);
+
+        if (isExpired) {
+          // Skip caching expired listings so they do not resurface in feeds,
+          // but keep the raw event so owners can still manage and renew them.
+          continue;
+        }
+
         try {
-          if (
-            deletedProductsInCacheSet &&
-            event.id in deletedProductsInCacheSet
-          ) {
+          const parsedProduct = parseTags(event);
+          if (!parsedProduct) continue;
+
+          if (deletedProductsInCacheSet.has(event.id)) {
             deletedProductsInCacheSet.delete(event.id);
           }
           await addProductToCache(event);
@@ -160,7 +170,16 @@ export const fetchCart = async (
                   event.tags.some((tag) => tag[0] === "d" && tag[1] === dTag)
                 );
                 if (foundEvent) {
-                  cartArrayFromRelay.push(parseTags(foundEvent) as ProductData);
+                  const { isExpired } = getProductExpirationStatus(foundEvent);
+                  if (isExpired) {
+                    continue;
+                  }
+
+                  const parsedProduct = parseTags(foundEvent) as
+                    ProductData | undefined;
+                  if (parsedProduct) {
+                    cartArrayFromRelay.push(parsedProduct);
+                  }
                 }
               }
             }

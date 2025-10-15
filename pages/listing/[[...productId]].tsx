@@ -15,6 +15,7 @@ const Listing = () => {
     undefined
   );
   const [productIdString, setProductIdString] = useState("");
+  const [listingExpired, setListingExpired] = useState(false);
 
   const [fiatOrderIsPlaced, setFiatOrderIsPlaced] = useState(false);
   const [fiatOrderFailed, setFiatOrderFailed] = useState(false);
@@ -61,7 +62,16 @@ const Listing = () => {
 
       if (matchingEvent) {
         const parsed = parseTags(matchingEvent);
-        setProductData(parsed);
+        if (parsed?.isExpired) {
+          setProductData(undefined);
+          setListingExpired(true);
+        } else {
+          setProductData(parsed);
+          setListingExpired(false);
+        }
+      } else {
+        setProductData(undefined);
+        setListingExpired(false);
       }
     }
   }, [productContext.isLoading, productContext.productEvents, productIdString]);
@@ -69,7 +79,12 @@ const Listing = () => {
   return (
     <>
       <div className="flex h-full min-h-screen flex-col bg-light-bg pt-20 dark:bg-dark-bg">
-        {productData && (
+        {listingExpired && (
+          <div className="mx-auto mt-10 max-w-2xl rounded-md border border-red-300 bg-red-50 p-6 text-center text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+            This listing has expired and is no longer available.
+          </div>
+        )}
+        {productData && !listingExpired && (
           <CheckoutCard
             productData={productData}
             setFiatOrderIsPlaced={setFiatOrderIsPlaced}

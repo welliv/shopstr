@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useMemo } from "react";
 import { nip19 } from "nostr-tools";
 import { deleteEvent } from "@/utils/nostr/nostr-helper-functions";
 import { NostrEvent } from "../utils/types/types";
@@ -15,11 +15,13 @@ import ShopstrSpinner from "./utility-components/shopstr-spinner";
 import { useRouter } from "next/router";
 import parseTags, {
   ProductData,
+  updateProductExpirationSnapshot,
 } from "@/utils/parsers/product-parser-functions";
 import {
   NostrContext,
   SignerContext,
 } from "@/components/utility-components/nostr-context-provider";
+import useCurrentUnixTime from "@/components/hooks/use-current-unix-time";
 
 const DisplayProducts = ({
   focusedPubkey,
@@ -60,6 +62,13 @@ const DisplayProducts = ({
 
   const { nostr } = useContext(NostrContext);
   const { signer, pubkey: userPubkey } = useContext(SignerContext);
+  const currentUnixTime = useCurrentUnixTime();
+
+  const timeAwareProducts = useMemo(() => {
+    return productEvents.map((product) =>
+      updateProductExpirationSnapshot(product, currentUnixTime)
+    );
+  }, [productEvents, currentUnixTime]);
 
   // Load saved page from session storage on mount
   useEffect(() => {
@@ -94,40 +103,63 @@ const DisplayProducts = ({
             const followList = followsContext.followList;
             if (followList.length > 0 && followList.includes(event.pubkey)) {
               const parsedData = parseTags(event);
-              if (parsedData) parsedProductData.push(parsedData);
+              if (!parsedData) return;
+              if (!isMyListings && parsedData.isExpired) return;
+              parsedProductData.push(parsedData);
             }
           }
         } else {
           const parsedData = parseTags(event);
-          if (parsedData) parsedProductData.push(parsedData);
+          if (!parsedData) return;
+          if (!isMyListings && parsedData.isExpired) return;
+          parsedProductData.push(parsedData);
         }
       });
       setProductEvents(parsedProductData);
       setIsProductLoading(false);
     }
-  }, [productEventContext, wotFilter]);
+  }, [productEventContext, wotFilter, isMyListings]);
+
+  useEffect(() => {
+    if (!focusedProduct) return;
+
+    const updated = timeAwareProducts.find(
+      (product) => product.id === focusedProduct.id
+    );
+
+    if (!updated) {
+      setFocusedProduct(undefined);
+      setShowModal(false);
+      return;
+    }
+
+    if (updated !== focusedProduct) {
+      setFocusedProduct(updated);
+    }
+  }, [timeAwareProducts, focusedProduct]);
 
   useEffect(() => {
     if (focusedPubkey && setCategories) {
       const productCategories: string[] = [];
-      productEvents.forEach((event) => {
+      timeAwareProducts.forEach((event) => {
         if (event.pubkey === focusedPubkey) {
           productCategories.push(...event.categories);
         }
       });
       setCategories(productCategories);
     }
-  }, [productEvents, focusedPubkey]);
+  }, [timeAwareProducts, focusedPubkey]);
 
   useEffect(() => {
-    if (!productEvents || !isInitialized) return;
+    if (!timeAwareProducts || !isInitialized) return;
 
-    const filtered = productEvents.filter((product) => {
+    const filtered = timeAwareProducts.filter((product) => {
       if (focusedPubkey && product.pubkey !== focusedPubkey) return false;
       if (!productSatisfiesAllFilters(product)) return false;
       if (!product.currency) return false;
       if (product.images.length === 0) return false;
       if (product.contentWarning) return false;
+      if (!isMyListings && product.isExpired) return false;
       if (
         product.pubkey ===
           "3da2082b7aa5b76a8f0c134deab3f7848c3b5e3a3079c65947d88422b69c1755" &&
@@ -169,12 +201,13 @@ const DisplayProducts = ({
 
     onFilteredProductsChange?.(filtered);
   }, [
-    productEvents,
+    timeAwareProducts,
     selectedSearch,
     selectedLocation,
     selectedCategories,
     focusedPubkey,
     isInitialized,
+    isMyListings,
   ]);
 
   // Scroll effect only on page change
@@ -400,7 +433,7 @@ const DisplayProducts = ({
         )}
         {isMyListings &&
           !isProductsLoading &&
-          !productEvents.some((product) => product.pubkey === userPubkey) && (
+          !timeAwareProducts.some((product) => product.pubkey === userPubkey) && (
             <div className="mt-20 flex flex-grow items-center justify-center py-10">
               <div className="w-full max-w-lg rounded-lg bg-light-fg p-8 text-center shadow-lg dark:bg-dark-fg">
                 <p className="text-3xl font-semibold text-light-text dark:text-dark-text">

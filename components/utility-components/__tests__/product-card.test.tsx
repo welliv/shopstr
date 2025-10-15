@@ -48,18 +48,21 @@ jest.mock("@nextui-org/react", () => ({
 const mockProductData: ProductData = {
   id: "123",
   pubkey: "owner_pubkey",
+  createdAt: 1_672_531_200,
   title: "Test Product",
   summary: "A great product summary.",
+  publishedAt: "",
   images: ["image1.jpg"],
   categories: ["Electronics"],
   location: "Online",
   price: 1000,
   currency: "SATS",
+  totalCost: 1000,
   shippingType: "Free",
   status: "active",
-  created_at: 0,
-  content: "",
-  tags: [],
+  expiration: Math.floor(Date.now() / 1000) + 60,
+  isExpired: false,
+  secondsUntilExpiration: 60,
 };
 
 const renderWithContext = (
@@ -89,6 +92,10 @@ describe("ProductCard", () => {
       expect(screen.getByTestId("profile-dropdown")).toBeInTheDocument();
       expect(screen.getByText("Test Product")).toBeInTheDocument();
       expect(screen.getByText("Active")).toBeInTheDocument();
+      const countdown = screen.getByText(/Expires in/i);
+      expect(countdown).toHaveTextContent("Expires in 1m");
+      expect(countdown).toHaveAttribute("aria-live", "polite");
+      expect(screen.getByText("Expiring Soon")).toBeInTheDocument();
     });
 
     it("calls onProductClick when the card is clicked", () => {
@@ -100,7 +107,10 @@ describe("ProductCard", () => {
         />
       );
       fireEvent.click(screen.getByTestId("image-carousel").parentElement!);
-      expect(mockOnClick).toHaveBeenCalledWith(mockProductData);
+      expect(mockOnClick).toHaveBeenCalledWith(
+        mockProductData,
+        expect.any(Object)
+      );
     });
 
     it('shows "shop_profile" dropdown key for the owner', () => {
@@ -128,6 +138,19 @@ describe("ProductCard", () => {
         <ProductCard productData={{ ...mockProductData, status: "sold" }} />
       );
       expect(screen.getByText("Sold")).toBeInTheDocument();
+    });
+
+    it("shows expired status correctly", () => {
+      renderWithContext(
+        <ProductCard
+          productData={{
+            ...mockProductData,
+            isExpired: true,
+            secondsUntilExpiration: 0,
+          }}
+        />
+      );
+      expect(screen.getByText("Expired")).toBeInTheDocument();
     });
   });
 });

@@ -2,6 +2,93 @@ import { ShippingOptionsType } from "@/utils/STATIC-VARIABLES";
 import { calculateTotalCost } from "@/components/utility-components/display-monetary-info";
 import { NostrEvent } from "@/utils/types/types";
 
+export const getExpirationTimestamp = (
+  tags?: string[][]
+): number | undefined => {
+  if (!tags) return undefined;
+
+  for (const tag of tags) {
+    if (tag[0] !== "expiration") continue;
+    const value = tag[1];
+    if (!value) continue;
+
+    const timestamp = Number(value);
+    if (!Number.isNaN(timestamp)) {
+      return timestamp;
+    }
+  }
+
+  return undefined;
+};
+
+export const isExpiredAtReference = (
+  expiration?: number,
+  referenceTime: number = Math.floor(Date.now() / 1000)
+): boolean => {
+  if (typeof expiration !== "number") {
+    return false;
+  }
+
+  return expiration <= referenceTime;
+};
+
+export const getProductExpirationStatus = (
+  productEvent: Pick<NostrEvent, "tags">,
+  referenceTime: number = Math.floor(Date.now() / 1000)
+) => {
+  const expiration = getExpirationTimestamp(productEvent.tags);
+  const isExpired = isExpiredAtReference(expiration, referenceTime);
+  const secondsUntilExpiration =
+    typeof expiration === "number"
+      ? Math.max(0, expiration - referenceTime)
+      : undefined;
+
+  return {
+    expiration,
+    isExpired,
+    secondsUntilExpiration,
+  };
+};
+
+export const updateProductExpirationSnapshot = (
+  product: ProductData,
+  referenceTime: number = Math.floor(Date.now() / 1000)
+): ProductData => {
+  const { expiration } = product;
+
+  if (typeof expiration !== "number") {
+    if (!product.isExpired && product.secondsUntilExpiration === undefined) {
+      return product;
+    }
+
+    if (!product.isExpired || product.secondsUntilExpiration !== undefined) {
+      return {
+        ...product,
+        isExpired: false,
+        secondsUntilExpiration: undefined,
+      };
+    }
+
+    return product;
+  }
+
+  const secondsUntilExpiration = Math.max(0, expiration - referenceTime);
+  const isExpired = expiration <= referenceTime;
+
+  if (
+    product.isExpired === isExpired &&
+    product.secondsUntilExpiration === secondsUntilExpiration
+  ) {
+    return product;
+  }
+
+  return {
+    ...product,
+    isExpired,
+    secondsUntilExpiration,
+  };
+};
+
 export type ProductData = {
   id: string;
   pubkey: string;
@@ -33,6 +120,10 @@ export type ProductData = {
   required?: string;
   restrictions?: string;
   pickupLocations?: string[];
+  expiration?: number;
+  isExpired?: boolean;
+  secondsUntilExpiration?: number;
+  rawEvent?: NostrEvent;
 };
 
 export const parseTags = (productEvent: NostrEvent) => {
@@ -49,7 +140,10 @@ export const parseTags = (productEvent: NostrEvent) => {
     price: 0,
     currency: "",
     totalCost: 0,
+    expiration: undefined,
+    isExpired: false,
   };
+  parsedData.rawEvent = productEvent;
   parsedData.pubkey = productEvent.pubkey;
   parsedData.id = productEvent.id;
   parsedData.createdAt = productEvent.created_at;
@@ -168,6 +262,11 @@ export const parseTags = (productEvent: NostrEvent) => {
     }
   });
   parsedData.totalCost = calculateTotalCost(parsedData);
+  const { expiration, isExpired, secondsUntilExpiration } =
+    getProductExpirationStatus(productEvent);
+  parsedData.expiration = expiration;
+  parsedData.isExpired = isExpired;
+  parsedData.secondsUntilExpiration = secondsUntilExpiration;
   return parsedData;
 };
 
