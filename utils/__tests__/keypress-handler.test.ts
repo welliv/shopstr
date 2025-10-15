@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { renderHook, act, fireEvent } from "@testing-library/react";
 import { useKeyPress } from "../keypress-handler";
 

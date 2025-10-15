@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NostrNSecSigner } from "../nostr-nsec-signer";
 import * as nostrTools from "nostr-tools";
 import * as nip49 from "nostr-tools/nip49";

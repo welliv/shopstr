@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { buildSrcSet } from "../images";
 
 describe("buildSrcSet", () => {

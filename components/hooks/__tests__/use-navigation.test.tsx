@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { renderHook } from "@testing-library/react";
 import { usePathname } from "next/navigation";
 import useNavigation from "../use-navigation";

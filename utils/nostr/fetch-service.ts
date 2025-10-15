@@ -176,7 +176,8 @@ export const fetchCart = async (
                   }
 
                   const parsedProduct = parseTags(foundEvent) as
-                    ProductData | undefined;
+                    | ProductData
+                    | undefined;
                   if (parsedProduct) {
                     cartArrayFromRelay.push(parsedProduct);
                   }

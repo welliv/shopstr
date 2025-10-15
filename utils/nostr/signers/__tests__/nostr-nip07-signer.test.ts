@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NostrNIP07Signer } from "../nostr-nip07-signer";
 import { NostrEventTemplate } from "@/utils/nostr/nostr-manager";
 

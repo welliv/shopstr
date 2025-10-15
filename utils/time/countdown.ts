@@ -15,12 +15,15 @@ export const calculateDurationParts = (totalSeconds: number): DurationParts => {
   return { days, hours, minutes, seconds };
 };
 
-export const formatDurationCompact = (totalSeconds?: number): string | undefined => {
+export const formatDurationCompact = (
+  totalSeconds?: number
+): string | undefined => {
   if (totalSeconds === undefined || Number.isNaN(totalSeconds)) {
     return undefined;
   }
 
-  const { days, hours, minutes, seconds } = calculateDurationParts(totalSeconds);
+  const { days, hours, minutes, seconds } =
+    calculateDurationParts(totalSeconds);
   const parts: string[] = [];
 
   if (days > 0) {
@@ -42,12 +45,15 @@ export const formatDurationCompact = (totalSeconds?: number): string | undefined
   return parts.slice(0, 3).join(" ");
 };
 
-export const formatDurationLong = (totalSeconds?: number): string | undefined => {
+export const formatDurationLong = (
+  totalSeconds?: number
+): string | undefined => {
   if (totalSeconds === undefined || Number.isNaN(totalSeconds)) {
     return undefined;
   }
 
-  const { days, hours, minutes, seconds } = calculateDurationParts(totalSeconds);
+  const { days, hours, minutes, seconds } =
+    calculateDurationParts(totalSeconds);
   const parts: string[] = [];
 
   if (days > 0) {

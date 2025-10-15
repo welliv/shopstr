@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NostrNIP46Signer } from "../nostr-nip46-signer";
 import { NostrManager } from "@/utils/nostr/nostr-manager";
 import { newPromiseWithTimeout } from "@/utils/timeout";

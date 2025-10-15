@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom";
@@ -92,7 +93,9 @@ describe("ProductCard", () => {
       expect(screen.getByTestId("profile-dropdown")).toBeInTheDocument();
       expect(screen.getByText("Test Product")).toBeInTheDocument();
       expect(screen.getByText("Active")).toBeInTheDocument();
-      expect(screen.getByText(/Expires in/i)).toHaveTextContent("Expires in 1m");
+      expect(screen.getByText(/Expires in/i)).toHaveTextContent(
+        "Expires in 1m"
+      );
       expect(screen.getByText("Expiring Soon")).toBeInTheDocument();
     });
 

@@ -32,9 +32,12 @@ export const useCurrentUnixTime = (
       return;
     }
 
-    intervalRef.current = setInterval(() => {
-      setNow(Math.floor(Date.now() / 1000));
-    }, Math.max(250, intervalMs));
+    intervalRef.current = setInterval(
+      () => {
+        setNow(Math.floor(Date.now() / 1000));
+      },
+      Math.max(250, intervalMs)
+    );
 
     return () => {
       if (intervalRef.current) {

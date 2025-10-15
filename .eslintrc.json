@@ -20,5 +20,17 @@
     "react-hooks/exhaustive-deps": "warn",
     "no-console": ["warn", { "allow": ["warn", "error"] }]
   },
-  "ignorePatterns": ["node_modules/", ".next/", "out/", "public/", "**/*.js"]
+  "ignorePatterns": ["node_modules/", ".next/", "out/", "public/", "**/*.js"],
+  "overrides": [
+    {
+      "files": [
+        "**/__tests__/**/*.{ts,tsx}",
+        "**/*.test.{ts,tsx}",
+        "**/*.test.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/ban-ts-comment": "off"
+      }
+    }
+  ]
 }

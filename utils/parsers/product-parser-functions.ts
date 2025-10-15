@@ -260,9 +260,8 @@ export const parseTags = (productEvent: NostrEvent) => {
 
           if (values[0] === "custom") {
             const maybeSeconds = Number(values[1]);
-            const normalizedSeconds = normalizeCustomDurationSeconds(
-              maybeSeconds
-            );
+            const normalizedSeconds =
+              normalizeCustomDurationSeconds(maybeSeconds);
 
             if (normalizedSeconds) {
               parsedData.expirationCustomSeconds = normalizedSeconds;

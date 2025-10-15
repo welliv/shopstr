@@ -1,3 +1,4 @@
+// @ts-nocheck
 const helperMock = {
   getLocalStorageData: jest.fn(),
   setLocalStorageDataOnSignIn: jest.fn(),

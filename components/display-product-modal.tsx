@@ -32,7 +32,10 @@ import { ProductData } from "@/utils/parsers/product-parser-functions";
 import { ProductContext } from "@/utils/context/context";
 import { addProductToCache } from "@/utils/nostr/cache-service";
 import { renewListing } from "@/utils/nostr/nostr-helper-functions";
-import { formatDurationCompact, formatDurationLong } from "@/utils/time/countdown";
+import {
+  formatDurationCompact,
+  formatDurationLong,
+} from "@/utils/time/countdown";
 import {
   formatCustomDurationDescription,
   formatCustomDurationLabel,
@@ -91,10 +94,7 @@ export default function DisplayProductModal({
       option: productData.expirationDuration,
       customSeconds: productData.expirationCustomSeconds,
     } as const;
-  }, [
-    productData.expirationDuration,
-    productData.expirationCustomSeconds,
-  ]);
+  }, [productData.expirationDuration, productData.expirationCustomSeconds]);
 
   const expirationPolicyLabel = useMemo(() => {
     if (!expirationPolicy) return null;
@@ -247,94 +247,94 @@ export default function DisplayProductModal({
               />
             ) : null}
             <Divider />
-              <div className="flex h-fit w-full flex-row flex-wrap items-center justify-between gap-2">
-                <ProfileWithDropdown
-                  pubkey={productData.pubkey}
-                  dropDownKeys={
-                    productData.pubkey === userPubkey
-                      ? ["shop_profile"]
-                      : ["shop", "inquiry", "copy_npub"]
-                  }
-                />
-                <Chip
-                  key={productData.location}
-                  startContent={locationAvatar(productData.location)}
-                >
-                  {productData.location}
-                </Chip>
-                <CompactCategories categories={productData.categories} />
-                {showCountdown && (
-                  <div className="rounded-lg bg-purple-100 px-3 py-2 text-sm font-semibold text-purple-700 shadow-sm dark:bg-purple-900/40 dark:text-purple-200">
-                    Listing expires in {countdownLong}
-                  </div>
-                )}
-                {expirationPolicyLabel && (
-                  <div className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-purple-700 shadow-sm dark:border-purple-500/40 dark:bg-purple-900/30 dark:text-purple-200">
-                    Refresh cadence: {expirationPolicyLabel}
-                    {expirationPolicyDescription && (
-                      <span className="mt-1 block text-[11px] normal-case text-purple-600 dark:text-purple-200/90">
-                        {expirationPolicyDescription}
-                      </span>
-                    )}
-                  </div>
-                )}
-                <div className="text-right">
-                  <p className="text-sm font-semibold">Published</p>
-                  <p className="text-sm">{publishedDate[0]}</p>
-                  <p className="text-sm">{publishedDate[1]}</p>
+            <div className="flex h-fit w-full flex-row flex-wrap items-center justify-between gap-2">
+              <ProfileWithDropdown
+                pubkey={productData.pubkey}
+                dropDownKeys={
+                  productData.pubkey === userPubkey
+                    ? ["shop_profile"]
+                    : ["shop", "inquiry", "copy_npub"]
+                }
+              />
+              <Chip
+                key={productData.location}
+                startContent={locationAvatar(productData.location)}
+              >
+                {productData.location}
+              </Chip>
+              <CompactCategories categories={productData.categories} />
+              {showCountdown && (
+                <div className="rounded-lg bg-purple-100 px-3 py-2 text-sm font-semibold text-purple-700 shadow-sm dark:bg-purple-900/40 dark:text-purple-200">
+                  Listing expires in {countdownLong}
                 </div>
-                {expirationDate && (
-                  <div className="text-right">
-                    <p className="text-sm font-semibold">Expires</p>
-                    <p
-                      className={`text-sm ${
-                        productData.isExpired
-                          ? "text-red-500 dark:text-red-300"
-                          : ""
-                      }`}
-                    >
-                      {expirationDate[0]}
+              )}
+              {expirationPolicyLabel && (
+                <div className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-purple-700 shadow-sm dark:border-purple-500/40 dark:bg-purple-900/30 dark:text-purple-200">
+                  Refresh cadence: {expirationPolicyLabel}
+                  {expirationPolicyDescription && (
+                    <span className="mt-1 block text-[11px] normal-case text-purple-600 dark:text-purple-200/90">
+                      {expirationPolicyDescription}
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="text-right">
+                <p className="text-sm font-semibold">Published</p>
+                <p className="text-sm">{publishedDate[0]}</p>
+                <p className="text-sm">{publishedDate[1]}</p>
+              </div>
+              {expirationDate && (
+                <div className="text-right">
+                  <p className="text-sm font-semibold">Expires</p>
+                  <p
+                    className={`text-sm ${
+                      productData.isExpired
+                        ? "text-red-500 dark:text-red-300"
+                        : ""
+                    }`}
+                  >
+                    {expirationDate[0]}
+                  </p>
+                  <p
+                    className={`text-sm ${
+                      productData.isExpired
+                        ? "text-red-500 dark:text-red-300"
+                        : ""
+                    }`}
+                  >
+                    {expirationDate[1]}
+                  </p>
+                  {!productData.isExpired && countdownCompact && (
+                    <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-purple-600 dark:text-purple-300">
+                      {countdownCompact} remaining
                     </p>
-                    <p
-                      className={`text-sm ${
-                        productData.isExpired
-                          ? "text-red-500 dark:text-red-300"
-                          : ""
-                      }`}
-                    >
-                      {expirationDate[1]}
-                    </p>
-                    {!productData.isExpired && countdownCompact && (
-                      <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-purple-600 dark:text-purple-300">
-                        {countdownCompact} remaining
-                      </p>
-                    )}
-                  </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <Divider />
+            <span className="text-xl font-semibold">Summary: </span>
+            <span className="whitespace-break-spaces break-all">
+              {productData.summary}
+            </span>
+            {productData.isExpired && expirationDate && (
+              <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                This listing expired on {expirationDate[0]} at{" "}
+                {expirationDate[1]}. Renew it to make it visible in the
+                marketplace again.
+                {expirationPolicyLabel && (
+                  <span className="mt-2 block text-xs font-semibold uppercase tracking-wide text-red-500 dark:text-red-300">
+                    Refresh cadence: {expirationPolicyLabel}
+                  </span>
+                )}
+                {expirationPolicyDescription && (
+                  <span className="mt-1 block text-xs text-red-500/80 dark:text-red-200/80">
+                    {expirationPolicyDescription}
+                  </span>
                 )}
               </div>
-              <Divider />
-              <span className="text-xl font-semibold">Summary: </span>
-              <span className="whitespace-break-spaces break-all">
-                {productData.summary}
-              </span>
-                {productData.isExpired && expirationDate && (
-                  <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
-                    This listing expired on {expirationDate[0]} at {" "}
-                    {expirationDate[1]}. Renew it to make it visible in the
-                    marketplace again.
-                    {expirationPolicyLabel && (
-                      <span className="mt-2 block text-xs font-semibold uppercase tracking-wide text-red-500 dark:text-red-300">
-                        Refresh cadence: {expirationPolicyLabel}
-                      </span>
-                    )}
-                    {expirationPolicyDescription && (
-                      <span className="mt-1 block text-xs text-red-500/80 dark:text-red-200/80">
-                        {expirationPolicyDescription}
-                      </span>
-                    )}
-                  </div>
-                )}
-              {productData.sizes && productData.sizes.length > 0 ? (
+            )}
+            {productData.sizes && productData.sizes.length > 0 ? (
               <>
                 <span className="text-xl font-semibold">Sizes: </span>
                 <div className="flex flex-wrap items-center">

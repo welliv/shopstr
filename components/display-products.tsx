@@ -433,7 +433,9 @@ const DisplayProducts = ({
         )}
         {isMyListings &&
           !isProductsLoading &&
-          !timeAwareProducts.some((product) => product.pubkey === userPubkey) && (
+          !timeAwareProducts.some(
+            (product) => product.pubkey === userPubkey
+          ) && (
             <div className="mt-20 flex flex-grow items-center justify-center py-10">
               <div className="w-full max-w-lg rounded-lg bg-light-fg p-8 text-center shadow-lg dark:bg-dark-fg">
                 <p className="text-3xl font-semibold text-light-text dark:text-dark-text">

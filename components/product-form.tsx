@@ -54,7 +54,7 @@ import {
 } from "@/utils/types/types";
 import {
   DEFAULT_CUSTOM_DURATION_SECONDS,
-  DEFAULT_LISTING_DURATION,
+  DEFAULT_LISTING_DURATION_OPTION,
   LISTING_DURATION_DEFINITIONS,
   MAX_CUSTOM_DURATION_DAYS,
   buildExpirationPolicyTag,
@@ -109,7 +109,7 @@ export default function ProductForm({
   const defaultListingOption =
     oldValues && isListingDurationOption(oldValues.expirationDuration)
       ? oldValues.expirationDuration
-      : DEFAULT_LISTING_DURATION.option;
+      : DEFAULT_LISTING_DURATION_OPTION;
 
   const fallbackCustomSeconds = DEFAULT_CUSTOM_DURATION_SECONDS;
   const initialCustomSeconds =
@@ -155,7 +155,7 @@ export default function ProductForm({
           "Shipping Option": "N/A",
           Status: "active",
           "Pickup Locations": [""],
-          "Listing Duration": DEFAULT_LISTING_DURATION.option,
+          "Listing Duration": DEFAULT_LISTING_DURATION_OPTION,
           "Custom Duration Days": initialCustomDays,
           "Custom Duration Hours": initialCustomHours,
         },
@@ -181,9 +181,8 @@ export default function ProductForm({
     watchedCustomDays,
     watchedCustomHours
   );
-  const normalizedCustomSeconds = normalizeCustomDurationSeconds(
-    rawCustomSeconds
-  );
+  const normalizedCustomSeconds =
+    normalizeCustomDurationSeconds(rawCustomSeconds);
   const customDurationLabel = formatCustomDurationLabel(
     normalizedCustomSeconds
   );
@@ -199,11 +198,7 @@ export default function ProductForm({
     if (selectedListingDuration === "custom" && normalizedCustomSeconds) {
       setCustomDurationError(null);
     }
-  }, [
-    selectedListingDuration,
-    normalizedCustomSeconds,
-    customDurationError,
-  ]);
+  }, [selectedListingDuration, normalizedCustomSeconds, customDurationError]);
 
   useEffect(() => {
     if (
@@ -239,7 +234,7 @@ export default function ProductForm({
       data["Listing Duration"] as string
     )
       ? (data["Listing Duration"] as ListingDurationOption)
-      : DEFAULT_LISTING_DURATION.option;
+      : DEFAULT_LISTING_DURATION_OPTION;
 
     const customDaysInput = Number(data["Custom Duration Days"] ?? 0);
     const customHoursInput = Number(data["Custom Duration Hours"] ?? 0);
@@ -977,7 +972,8 @@ export default function ProductForm({
                           Listing duration
                         </p>
                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Decide how long this listing stays live before you republish it.
+                          Decide how long this listing stays live before you
+                          republish it.
                         </p>
                       </div>
                       {chipLabel && (
@@ -1033,7 +1029,8 @@ export default function ProductForm({
                             Tailored cadence
                           </span>
                           <span className="mt-2 block text-sm text-gray-600 transition-colors group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-200">
-                            Compose a made-to-measure window—anywhere up to six days.
+                            Compose a made-to-measure window—anywhere up to six
+                            days.
                           </span>
                           <span className="mt-3 block text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
                             {isCustomSelected ? "Selected" : "Select"}
@@ -1043,7 +1040,9 @@ export default function ProductForm({
                         {isCustomSelected && (
                           <div className="mt-4 space-y-4">
                             <p className="text-sm text-gray-600 dark:text-gray-300">
-                              Fine-tune the lifespan of this drop. When it lapses, it will gracefully leave the floor until you relist it.
+                              Fine-tune the lifespan of this drop. When it
+                              lapses, it will gracefully leave the floor until
+                              you relist it.
                             </p>
                             <div className="grid grid-cols-2 gap-3">
                               <Controller
@@ -1058,16 +1057,22 @@ export default function ProductForm({
                                     max={MAX_CUSTOM_DURATION_DAYS}
                                     value={String(field.value ?? 0)}
                                     onChange={(event) => {
-                                      const rawValue = Number(event.target.value);
+                                      const rawValue = Number(
+                                        event.target.value
+                                      );
                                       const clampedValue = Math.max(
                                         0,
                                         Math.min(
                                           MAX_CUSTOM_DURATION_DAYS,
-                                          Number.isNaN(rawValue) ? 0 : Math.floor(rawValue)
+                                          Number.isNaN(rawValue)
+                                            ? 0
+                                            : Math.floor(rawValue)
                                         )
                                       );
                                       field.onChange(clampedValue);
-                                      if (clampedValue >= MAX_CUSTOM_DURATION_DAYS) {
+                                      if (
+                                        clampedValue >= MAX_CUSTOM_DURATION_DAYS
+                                      ) {
                                         setValue("Custom Duration Hours", 0, {
                                           shouldDirty: true,
                                         });
@@ -1081,7 +1086,8 @@ export default function ProductForm({
                                 control={control}
                                 render={({ field }) => {
                                   const isMaxDay =
-                                    watchedCustomDays >= MAX_CUSTOM_DURATION_DAYS;
+                                    watchedCustomDays >=
+                                    MAX_CUSTOM_DURATION_DAYS;
                                   const maxHours = isMaxDay ? 0 : 23;
 
                                   return (
@@ -1094,7 +1100,9 @@ export default function ProductForm({
                                       disabled={isMaxDay}
                                       value={String(field.value ?? 0)}
                                       onChange={(event) => {
-                                        const rawValue = Number(event.target.value);
+                                        const rawValue = Number(
+                                          event.target.value
+                                        );
                                         const clampedValue = Math.max(
                                           0,
                                           Math.min(

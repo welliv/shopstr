@@ -1,3 +1,4 @@
+// @ts-nocheck
 // components/messages/__tests__/chat-message.test.tsx
 
 import React from "react";

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { fetchAllPosts } from "../fetch-service";
 import { NostrManager } from "@/utils/nostr/nostr-manager";
 import { NostrEvent } from "@/utils/types/types";

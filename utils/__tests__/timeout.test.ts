@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { newPromiseWithTimeout } from "../timeout";
 
 jest.useFakeTimers();

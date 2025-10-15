@@ -1,4 +1,4 @@
-import React, { useContext, useMemo } from "react";
+import React, { useContext } from "react";
 import { Chip } from "@nextui-org/react";
 import Link from "next/link";
 import { locationAvatar } from "./dropdowns/location-dropdown";
@@ -23,9 +23,9 @@ export default function ProductCard({
   const { pubkey: userPubkey } = useContext(SignerContext);
   if (!productData) return null;
 
-  const countdownLabel = useMemo(() => {
-    return formatDurationCompact(productData.secondsUntilExpiration);
-  }, [productData.secondsUntilExpiration]);
+  const countdownLabel = formatDurationCompact(
+    productData.secondsUntilExpiration
+  );
 
   const showCountdown = Boolean(countdownLabel) && !productData.isExpired;
   const isEndingSoon =
@@ -38,7 +38,9 @@ export default function ProductCard({
   const renderStatusBadge = () => {
     if (productData.isExpired) {
       return (
-        <span className={`${statusBadgeClass} bg-gray-900/80 text-gray-100 dark:bg-gray-100/90 dark:text-gray-900`}>
+        <span
+          className={`${statusBadgeClass} bg-gray-900/80 text-gray-100 dark:bg-gray-100/90 dark:text-gray-900`}
+        >
           Expired
         </span>
       );
@@ -46,7 +48,9 @@ export default function ProductCard({
 
     if (productData.status === "sold") {
       return (
-        <span className={`${statusBadgeClass} bg-red-500/90 text-white`}>Sold</span>
+        <span className={`${statusBadgeClass} bg-red-500/90 text-white`}>
+          Sold
+        </span>
       );
     }
 
@@ -97,13 +101,15 @@ export default function ProductCard({
           <h2 className="max-w-[70%] truncate text-xl font-semibold text-light-text dark:text-dark-text">
             {productData.title}
           </h2>
-          {!productData.isExpired && router.pathname !== "/" && showCountdown && (
-            <span
-              className={`rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700 dark:bg-purple-900/50 dark:text-purple-200`}
-            >
-              {isEndingSoon ? "Expiring Soon" : "Fresh Listing"}
-            </span>
-          )}
+          {!productData.isExpired &&
+            router.pathname !== "/" &&
+            showCountdown && (
+              <span
+                className={`rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700 dark:bg-purple-900/50 dark:text-purple-200`}
+              >
+                {isEndingSoon ? "Expiring Soon" : "Fresh Listing"}
+              </span>
+            )}
         </div>
         <div className="mb-3">
           <ProfileWithDropdown

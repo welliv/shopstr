@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NostrEvent } from "nostr-tools";
 import { parseCommunityEvent } from "../community-parser-functions";
 

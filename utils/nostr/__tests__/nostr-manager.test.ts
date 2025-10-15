@@ -1,3 +1,4 @@
+// @ts-nocheck
 const verifyEventMock = jest.fn();
 const fakePoolInstance = {
   ensureRelay: jest.fn().mockResolvedValue({

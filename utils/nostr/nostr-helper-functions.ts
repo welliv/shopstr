@@ -10,7 +10,12 @@ import {
 } from "nostr-tools";
 import { v4 as uuidv4 } from "uuid";
 import CryptoJS from "crypto-js";
-import { Community, CommunityRelays, NostrEvent, ProductFormValues } from "@/utils/types/types";
+import {
+  Community,
+  CommunityRelays,
+  NostrEvent,
+  ProductFormValues,
+} from "@/utils/types/types";
 import { ProductData } from "@/utils/parsers/product-parser-functions";
 import { Proof } from "@cashu/cashu-ts";
 import { NostrSigner } from "@/utils/nostr/signers/nostr-signer";
@@ -147,11 +152,15 @@ export async function PostListing(
   let listingDurationPolicy = DEFAULT_LISTING_DURATION;
 
   if (existingDurationIndex >= 0) {
-    const [, ...rawValues] = sanitizedValues[existingDurationIndex];
-    listingDurationPolicy = ensureListingDurationPolicy(rawValues);
-    sanitizedValues[existingDurationIndex] = buildExpirationPolicyTag(
-      listingDurationPolicy
-    );
+    const existingDurationTag = sanitizedValues[existingDurationIndex];
+
+    if (existingDurationTag) {
+      const [, ...rawValues] = existingDurationTag;
+      listingDurationPolicy = ensureListingDurationPolicy(rawValues);
+      sanitizedValues[existingDurationIndex] = buildExpirationPolicyTag(
+        listingDurationPolicy
+      );
+    }
   } else {
     listingDurationPolicy = DEFAULT_LISTING_DURATION;
     sanitizedValues.push(buildExpirationPolicyTag(listingDurationPolicy));

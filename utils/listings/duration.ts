@@ -21,8 +21,13 @@ export const MAX_CUSTOM_DURATION_DAYS = 6;
 export const MAX_CUSTOM_DURATION_SECONDS = MAX_CUSTOM_DURATION_DAYS * DAY;
 export const DEFAULT_CUSTOM_DURATION_SECONDS = 2 * DAY;
 
+export const DEFAULT_LISTING_DURATION_OPTION: Exclude<
+  ListingDurationOption,
+  "custom"
+> = "weekly";
+
 export const DEFAULT_LISTING_DURATION: ListingDurationPolicy = {
-  option: "weekly",
+  option: DEFAULT_LISTING_DURATION_OPTION,
 };
 
 export const LISTING_DURATION_DEFINITIONS: ListingDurationDefinition[] = [
@@ -47,7 +52,8 @@ export const LISTING_DURATION_DEFINITIONS: ListingDurationDefinition[] = [
   {
     value: "monthly",
     title: "Monthly",
-    subtitle: "The leisurely cadence for heritage collections and evergreen drops.",
+    subtitle:
+      "The leisurely cadence for heritage collections and evergreen drops.",
     cadenceLabel: "Monthly · renew every 30 days",
     cadenceDescription:
       "Ideal for enduring essentials. Let slow fashion and timeless goods shine with a once-a-month encore.",
@@ -58,7 +64,12 @@ export const LISTING_DURATION_DEFINITIONS: ListingDurationDefinition[] = [
 const LISTING_DURATION_LOOKUP = new Map<
   Exclude<ListingDurationOption, "custom">,
   ListingDurationDefinition
->(LISTING_DURATION_DEFINITIONS.map((definition) => [definition.value, definition]));
+>(
+  LISTING_DURATION_DEFINITIONS.map((definition) => [
+    definition.value,
+    definition,
+  ])
+);
 
 export function isListingDurationOption(
   value?: string | null
@@ -100,9 +111,11 @@ export function convertDaysHoursToSeconds(days: number, hours: number): number {
   return safeDays * DAY + safeHours * HOUR;
 }
 
-export function splitCustomDuration(
-  customSeconds?: number
-): { days: number; hours: number; minutes: number } {
+export function splitCustomDuration(customSeconds?: number): {
+  days: number;
+  hours: number;
+  minutes: number;
+} {
   if (!customSeconds) {
     return { days: 0, hours: 0, minutes: 0 };
   }
@@ -191,7 +204,7 @@ export function buildExpirationPolicyTag(
     );
 
     if (!normalizedSeconds) {
-      return ["expiration_policy", DEFAULT_LISTING_DURATION.option];
+      return ["expiration_policy", DEFAULT_LISTING_DURATION_OPTION];
     }
 
     return ["expiration_policy", "custom", String(normalizedSeconds)];
@@ -212,14 +225,13 @@ export function getListingDurationSeconds(
       return normalizedSeconds;
     }
 
-    return (
-      LISTING_DURATION_LOOKUP.get(DEFAULT_LISTING_DURATION.option)!.seconds
-    );
+    return LISTING_DURATION_LOOKUP.get(DEFAULT_LISTING_DURATION_OPTION)!
+      .seconds;
   }
 
   return (
     LISTING_DURATION_LOOKUP.get(policy.option)?.seconds ??
-    LISTING_DURATION_LOOKUP.get(DEFAULT_LISTING_DURATION.option)!.seconds
+    LISTING_DURATION_LOOKUP.get(DEFAULT_LISTING_DURATION_OPTION)!.seconds
   );
 }
 
