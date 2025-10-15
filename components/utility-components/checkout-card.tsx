@@ -75,6 +75,7 @@ export default function CheckoutCard({
   const [cart, setCart] = useState<ProductData[]>([]);
   const [selectedVolume, setSelectedVolume] = useState<string>("");
   const [currentPrice, setCurrentPrice] = useState(productData.price);
+  const isExpiredListing = !!productData.isExpired;
 
   const reviewsContext = useContext(ReviewsContext);
 
@@ -210,6 +211,13 @@ export default function CheckoutCard({
   }, [reviewsContext, merchantReview, productData.pubkey]);
 
   const toggleBuyNow = () => {
+    if (isExpiredListing) {
+      setFailureText(
+        "This listing has expired and can no longer be purchased."
+      );
+      setShowFailureModal(true);
+      return;
+    }
     if (isLoggedIn) {
       setIsBeingPaid(!isBeingPaid);
     } else {
@@ -218,6 +226,13 @@ export default function CheckoutCard({
   };
 
   const handleAddToCart = () => {
+    if (isExpiredListing) {
+      setFailureText(
+        "This listing has expired and cannot be added to the cart."
+      );
+      setShowFailureModal(true);
+      return;
+    }
     if (isLoggedIn) {
       if (
         !currencySelection.hasOwnProperty(productData.currency.toUpperCase()) ||
@@ -484,7 +499,14 @@ export default function CheckoutCard({
                   {renderSizeGrid()}
                   <div className="flex w-full flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      {productData.status !== "sold" ? (
+                      {isExpiredListing ? (
+                        <Button
+                          className={`${SHOPSTRBUTTONCLASSNAMES} cursor-not-allowed opacity-50`}
+                          disabled
+                        >
+                          Expired
+                        </Button>
+                      ) : productData.status !== "sold" ? (
                         <>
                           <Button
                             className={`min-w-fit bg-gradient-to-tr from-purple-700 via-purple-500 to-purple-700 text-dark-text shadow-lg dark:from-yellow-700 dark:via-yellow-500 dark:to-yellow-700 dark:text-light-text ${

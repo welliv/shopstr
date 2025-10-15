@@ -1,4 +1,10 @@
-import parseTags from "../product-parser-functions";
+import parseTags, {
+  getExpirationTimestamp,
+  isExpiredAtReference,
+  getProductExpirationStatus,
+  updateProductExpirationSnapshot,
+} from "../product-parser-functions";
+import type { ProductData } from "../product-parser-functions";
 import { calculateTotalCost } from "@/components/utility-components/display-monetary-info";
 import { NostrEvent } from "@/utils/types/types";
 
@@ -7,6 +13,79 @@ jest.mock("@/components/utility-components/display-monetary-info", () => ({
 }));
 
 const mockedCalculateTotalCost = calculateTotalCost as jest.Mock;
+
+describe("expiration helpers", () => {
+  it("extracts the first valid expiration timestamp", () => {
+    const tags = [
+      ["expiration", "invalid"],
+      ["expiration", "1700000000"],
+    ];
+
+    expect(getExpirationTimestamp(tags)).toBe(1700000000);
+  });
+
+  it("returns undefined when no expiration tag is present", () => {
+    expect(getExpirationTimestamp([["title", "test"]])).toBeUndefined();
+  });
+
+  it("determines expiration relative to a reference time", () => {
+    expect(isExpiredAtReference(10, 20)).toBe(true);
+    expect(isExpiredAtReference(20, 20)).toBe(true);
+    expect(isExpiredAtReference(30, 20)).toBe(false);
+  });
+
+  it("combines extraction and comparison in getProductExpirationStatus", () => {
+    const now = 1_700_000_000;
+    const event: { tags: string[][] } = {
+      tags: [["expiration", String(now - 1)]],
+    };
+
+    expect(getProductExpirationStatus(event, now)).toEqual({
+      expiration: now - 1,
+      isExpired: true,
+      secondsUntilExpiration: 0,
+    });
+  });
+
+  it("refreshes product expiration snapshots", () => {
+    const reference = 1_700_000_000;
+    const baseProduct: ProductData = {
+      id: "1",
+      pubkey: "pub",
+      createdAt: reference - 10,
+      title: "",
+      summary: "",
+      publishedAt: "",
+      images: [],
+      categories: [],
+      location: "",
+      price: 0,
+      currency: "USD",
+      totalCost: 0,
+      expiration: reference + 90,
+      isExpired: false,
+      secondsUntilExpiration: 100,
+    };
+
+    const updated = updateProductExpirationSnapshot(baseProduct, reference);
+    expect(updated.secondsUntilExpiration).toBe(90);
+    expect(updated.isExpired).toBe(false);
+
+    const expired = updateProductExpirationSnapshot(
+      { ...baseProduct, expiration: reference - 1 },
+      reference
+    );
+    expect(expired.isExpired).toBe(true);
+    expect(expired.secondsUntilExpiration).toBe(0);
+
+    const withoutExpiration = updateProductExpirationSnapshot(
+      { ...baseProduct, expiration: undefined, isExpired: true },
+      reference
+    );
+    expect(withoutExpiration.isExpired).toBe(false);
+    expect(withoutExpiration.secondsUntilExpiration).toBeUndefined();
+  });
+});
 
 describe("parseTags", () => {
   const baseEvent: NostrEvent = {
@@ -193,5 +272,31 @@ describe("parseTags", () => {
     const result = parseTags(event);
 
     expect(result.contentWarning).toBeFalsy();
+  });
+
+  it("should mark listings as expired when the expiration timestamp is in the past", () => {
+    const pastTimestamp = Math.floor(Date.now() / 1000) - 60;
+    const event = {
+      ...baseEvent,
+      tags: [["expiration", pastTimestamp.toString()]],
+    };
+
+    const result = parseTags(event);
+
+    expect(result?.expiration).toBe(pastTimestamp);
+    expect(result?.isExpired).toBe(true);
+  });
+
+  it("should keep listings active when the expiration timestamp is in the future", () => {
+    const futureTimestamp = Math.floor(Date.now() / 1000) + 60;
+    const event = {
+      ...baseEvent,
+      tags: [["expiration", futureTimestamp.toString()]],
+    };
+
+    const result = parseTags(event);
+
+    expect(result?.expiration).toBe(futureTimestamp);
+    expect(result?.isExpired).toBe(false);
   });
 });

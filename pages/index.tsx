@@ -9,23 +9,26 @@ import {
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/router";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ProductContext } from "@/utils/context/context";
 import ProductCard from "@/components/utility-components/product-card";
 import parseTags, {
   ProductData,
+  updateProductExpirationSnapshot,
 } from "@/utils/parsers/product-parser-functions";
 import { SignerContext } from "@/components/utility-components/nostr-context-provider";
 import Link from "next/link";
 import { nip19 } from "nostr-tools";
 import { NostrEvent } from "@/utils/types/types";
+import useCurrentUnixTime from "@/components/hooks/use-current-unix-time";
 
 export default function Landing() {
   const router = useRouter();
   const productEventContext = useContext(ProductContext);
 
   const [parsedProducts, setParsedProducts] = useState<ProductData[]>([]);
+  const currentUnixTime = useCurrentUnixTime();
 
   const signerContext = useContext(SignerContext);
   useEffect(() => {
@@ -38,17 +41,27 @@ export default function Landing() {
     const parsedProductsArray: ProductData[] = [];
     const products = productEventContext.productEvents;
     products.forEach((product: NostrEvent) => {
-      const parsedProduct = parseTags(product) as ProductData;
+      const parsedProduct = parseTags(product);
       if (
+        parsedProduct &&
         parsedProduct.images.length > 0 &&
         parsedProduct.currency &&
-        !parsedProduct.contentWarning
+        !parsedProduct.contentWarning &&
+        !parsedProduct.isExpired
       ) {
         parsedProductsArray.push(parsedProduct);
       }
     });
     setParsedProducts(parsedProductsArray);
   }, [productEventContext.productEvents]);
+
+  const marqueeProducts = useMemo(() => {
+    return parsedProducts
+      .map((product) =>
+        updateProductExpirationSnapshot(product, currentUnixTime)
+      )
+      .filter((product) => !product.isExpired);
+  }, [parsedProducts, currentUnixTime]);
 
   return (
     <div className="min-h-screen w-full bg-light-bg bg-gradient-to-b from-light-bg to-light-fg dark:bg-dark-bg dark:from-dark-bg dark:to-dark-fg">
@@ -99,7 +112,7 @@ export default function Landing() {
             }}
           >
             <div className="flex gap-4 md:gap-8">
-              {parsedProducts.slice(0, 21).map((product, index) => (
+              {marqueeProducts.slice(0, 21).map((product, index) => (
                 <div
                   key={`${product.id}-${index}`}
                   className="min-w-[270px] transform duration-300 transition-transform hover:scale-105 md:min-w-[300px]"
