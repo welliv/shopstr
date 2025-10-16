@@ -10,7 +10,13 @@ import {
 } from "nostr-tools";
 import { v4 as uuidv4 } from "uuid";
 import CryptoJS from "crypto-js";
-import { Community, CommunityRelays, NostrEvent, ProductFormValues } from "@/utils/types/types";
+import {
+  Community,
+  CommunityRelays,
+  NostrEvent,
+  ListingDurationPolicy,
+  ProductFormValues,
+} from "@/utils/types/types";
 import { ProductData } from "@/utils/parsers/product-parser-functions";
 import { Proof } from "@cashu/cashu-ts";
 import { NostrSigner } from "@/utils/nostr/signers/nostr-signer";
@@ -124,6 +130,37 @@ export async function createNostrProfileEvent(
   return msg;
 }
 
+function prepareListingTagsWithDuration(
+  values: ProductFormValues
+): {
+  sanitizedTags: ProductFormValues;
+  policy: ListingDurationPolicy;
+} {
+  const sanitizedTags: ProductFormValues = values
+    .filter(([key]) => key !== "published_at" && key !== "expiration")
+    .map((tag) => [...tag] as [string, ...string[]]);
+
+  const durationIndex = sanitizedTags.findIndex(
+    ([key]) => key === "expiration_policy"
+  );
+
+  if (durationIndex >= 0) {
+    const existingDurationTag = sanitizedTags[durationIndex];
+    const normalizedPolicy = ensureListingDurationPolicy(
+      existingDurationTag?.slice(1)
+    );
+    sanitizedTags[durationIndex] = buildExpirationPolicyTag(
+      normalizedPolicy
+    );
+
+    return { sanitizedTags, policy: normalizedPolicy };
+  }
+
+  const policy = DEFAULT_LISTING_DURATION;
+  sanitizedTags.push(buildExpirationPolicyTag(policy));
+  return { sanitizedTags, policy };
+}
+
 export async function PostListing(
   values: ProductFormValues,
   signer: NostrSigner,
@@ -137,33 +174,16 @@ export async function PostListing(
 
   if (!nostr) throw new Error("Nostr writer required");
 
-  const sanitizedValues: ProductFormValues = values
-    .filter(([key]) => key !== "published_at" && key !== "expiration")
-    .map((tag) => [...tag] as [string, ...string[]]);
+  const { sanitizedTags, policy: listingDurationPolicy } =
+    prepareListingTagsWithDuration(values);
 
-  const existingDurationIndex = sanitizedValues.findIndex(
-    ([key]) => key === "expiration_policy"
-  );
-  let listingDurationPolicy = DEFAULT_LISTING_DURATION;
-
-  if (existingDurationIndex >= 0) {
-    const [, ...rawValues] = sanitizedValues[existingDurationIndex];
-    listingDurationPolicy = ensureListingDurationPolicy(rawValues);
-    sanitizedValues[existingDurationIndex] = buildExpirationPolicyTag(
-      listingDurationPolicy
-    );
-  } else {
-    listingDurationPolicy = DEFAULT_LISTING_DURATION;
-    sanitizedValues.push(buildExpirationPolicyTag(listingDurationPolicy));
-  }
-
-  const summary = sanitizedValues.find(([key]) => key === "summary")?.[1] || "";
+  const summary = sanitizedTags.find(([key]) => key === "summary")?.[1] || "";
 
   const created_at = Math.floor(Date.now() / 1000);
   const durationSeconds = getListingDurationSeconds(listingDurationPolicy);
   const expiration = created_at + durationSeconds;
   const updatedValues: ProductFormValues = [
-    ...sanitizedValues,
+    ...sanitizedTags,
     ["published_at", String(created_at)],
     ["expiration", String(expiration)],
   ];

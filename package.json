@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
     "lint": "eslint . --ext .ts,.tsx",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsc --noEmit -p tsconfig.typecheck.json",
     "lint-all": "npm run type-check && npm run lint",
     "test": "jest",
     "test:watch": "jest --watch"

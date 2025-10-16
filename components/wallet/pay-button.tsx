@@ -49,6 +49,19 @@ const PayButton = () => {
 
   const walletContext = useContext(CashuWalletContext);
 
+  const isTestEnvironment = process.env.NODE_ENV === "test";
+  const modalMotionProps = isTestEnvironment
+    ? {
+        initial: "enter",
+        animate: "enter",
+        exit: "exit",
+        variants: {
+          enter: { opacity: 1, scale: 1, y: 0 },
+          exit: { opacity: 0, scale: 0.97, y: -16 },
+        },
+      }
+    : undefined;
+
   const {
     handleSubmit: handlePaySubmit,
     control: payControl,
@@ -202,6 +215,7 @@ const PayButton = () => {
         backdrop="blur"
         isOpen={showPayModal}
         onClose={handleTogglePayModal}
+        motionProps={modalMotionProps}
         classNames={{
           body: "py-6",
           backdrop: "bg-[#292f46]/50 backdrop-opacity-60",
@@ -294,6 +308,7 @@ const PayButton = () => {
                   backdrop="blur"
                   isOpen={paymentFailed}
                   onClose={() => setPaymentFailed(false)}
+                  disableAnimation={isTestEnvironment}
                   // className="bg-light-fg dark:bg-dark-fg text-black dark:text-white"
                   classNames={{
                     body: "py-6 ",
@@ -330,6 +345,7 @@ const PayButton = () => {
                   backdrop="blur"
                   isOpen={isPaid}
                   onClose={() => setIsPaid(false)}
+                  disableAnimation={isTestEnvironment}
                   // className="bg-light-fg dark:bg-dark-fg text-black dark:text-white"
                   classNames={{
                     body: "py-6 ",
