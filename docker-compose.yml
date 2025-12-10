@@ -1,0 +1,21 @@
+services:
+  # 1. Added a service name ('app')
+  app:
+    image: node:18-alpine
+    working_dir: /app
+    environment:
+      NODE_ENV: development # Changed for npm run dev
+      NEXT_TELEMETRY_DISABLED: "1"
+    # 2. Changed the command to start the dev server
+    command: >
+      sh -c "npm ci && npm run dev"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - ./.next:/app/.next
+    # 3. Added a port mapping
+    ports:
+      - "3000:5000"
+
+volumes:
+  node_modules:
