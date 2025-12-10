@@ -13,10 +13,6 @@ import {
   Divider,
   Image,
   useDisclosure,
-  Modal,
-  ModalContent,
-  ModalHeader,
-  ModalBody,
   Select,
   SelectItem,
   Input,
@@ -27,9 +23,8 @@ import {
   BoltIcon,
   CheckIcon,
   ClipboardIcon,
-  CurrencyDollarIcon,
+  WalletIcon,
 } from "@heroicons/react/24/outline";
-import { fiat } from "@getalby/lightning-tools";
 import {
   CashuMint,
   CashuWallet,
@@ -52,10 +47,10 @@ import QRCode from "qrcode";
 import { v4 as uuidv4 } from "uuid";
 import { nip19 } from "nostr-tools";
 import { ProductData } from "@/utils/parsers/product-parser-functions";
+import { webln } from "@getalby/sdk";
 import { formatWithCommas } from "./utility-components/display-monetary-info";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 import SignInModal from "./sign-in/SignInModal";
-import currencySelection from "../public/currencySelection.json";
 import FailureModal from "@/components/utility-components/failure-modal";
 import CountryDropdown from "./utility-components/dropdowns/country-dropdown";
 import {
@@ -74,10 +69,10 @@ export default function CartInvoiceCard({
   quantities,
   shippingTypes,
   totalCostsInSats,
-  totalCost,
+  subtotalCost,
+  appliedDiscounts = {},
+  discountCodes = {},
   onBackToCart,
-  setFiatOrderIsPlaced,
-  setFiatOrderFailed,
   setInvoiceIsPaid,
   setInvoiceGenerationFailed,
   setCashuPaymentSent,
@@ -87,10 +82,10 @@ export default function CartInvoiceCard({
   quantities: { [key: string]: number };
   shippingTypes: { [key: string]: string };
   totalCostsInSats: { [key: string]: number };
-  totalCost: number;
+  subtotalCost: number;
+  appliedDiscounts?: { [key: string]: number };
+  discountCodes?: { [key: string]: string };
   onBackToCart?: () => void;
-  setFiatOrderIsPlaced?: (fiatOrderIsPlaced: boolean) => void;
-  setFiatOrderFailed?: (fiatOrderFailed: boolean) => void;
   setInvoiceIsPaid?: (invoiceIsPaid: boolean) => void;
   setInvoiceGenerationFailed?: (invoiceGenerationFailed: boolean) => void;
   setCashuPaymentSent?: (cashuPaymentSent: boolean) => void;
@@ -124,15 +119,11 @@ export default function CartInvoiceCard({
   >(null);
   const [showOrderTypeSelection, setShowOrderTypeSelection] = useState(true);
 
-  const [fiatPaymentOptions, setFiatPaymentOptions] = useState<string[]>([]);
-  const [showFiatTypeOption, setShowFiatTypeOption] = useState(false);
-  const [selectedFiatOption, setSelectedFiatOption] = useState("");
-  const [showFiatPaymentInstructions, setShowFiatPaymentInstructions] =
-    useState(false);
-  const [fiatPaymentConfirmed, setFiatPaymentConfirmed] = useState(false);
-  const [pendingPaymentData, setPendingPaymentData] = useState<any>(null);
-
   const [showFailureModal, setShowFailureModal] = useState(false);
+
+  // NWC State
+  const [nwcInfo, setNwcInfo] = useState<any | null>(null);
+  const [isNwcLoading, setIsNwcLoading] = useState(false);
   const [failureText, setFailureText] = useState("");
 
   const [isFormValid, setIsFormValid] = useState(false);
@@ -143,6 +134,8 @@ export default function CartInvoiceCard({
   const [selectedPickupLocations, setSelectedPickupLocations] = useState<{
     [productId: string]: string;
   }>({});
+
+  const [totalCost, setTotalCost] = useState<number>(subtotalCost);
 
   const {
     handleSubmit: handleFormSubmit,
@@ -188,37 +181,26 @@ export default function CartInvoiceCard({
     );
   }, [products]);
 
+  // Load NWC info and check cart for NWC compatibility
   useEffect(() => {
-    if (!products || products.length === 0) {
-      setFiatPaymentOptions([]);
-      return;
-    } else {
-      const firstProduct = products[0]!;
-      const firstSellerProfile = profileContext.profileData.get(
-        firstProduct.pubkey
-      );
-      let commonFiatOptions = Object.keys(
-        firstSellerProfile?.content?.fiat_options || {}
-      );
-
-      for (let i = 1; i < products.length; i++) {
-        const productData = products[i]!;
-        const sellerProfile = profileContext.profileData.get(
-          productData.pubkey
-        );
-        const currentFiatOptionsKeys = Object.keys(
-          sellerProfile?.content?.fiat_options || {}
-        );
-
-        commonFiatOptions = commonFiatOptions.filter((option: string) =>
-          currentFiatOptionsKeys.includes(option)
-        );
-
-        if (commonFiatOptions.length === 0) break;
+    const loadNwcInfo = () => {
+      const { nwcInfo: infoString } = getLocalStorageData();
+      if (infoString) {
+        try {
+          const info = JSON.parse(infoString);
+          setNwcInfo(info);
+        } catch (e) {
+          console.error("Failed to parse NWC info", e);
+          setNwcInfo(null);
+        }
+      } else {
+        setNwcInfo(null);
       }
+    };
 
-      setFiatPaymentOptions(commonFiatOptions);
-    }
+    loadNwcInfo();
+    window.addEventListener("storage", loadNwcInfo);
+    return () => window.removeEventListener("storage", loadNwcInfo);
   }, [products, profileContext.profileData]);
 
   // Validate form completion
@@ -324,7 +306,7 @@ export default function CartInvoiceCard({
       return;
     }
 
-    await sendPaymentAndContactMessageWithKeys(
+    return await sendPaymentAndContactMessageWithKeys(
       pubkeyToReceiveMessage,
       message,
       product,
@@ -435,7 +417,7 @@ export default function CartInvoiceCard({
       decodedRandomPrivkeyForReceiver.data as Uint8Array,
       pubkeyToReceiveMessage
     );
-    await sendGiftWrappedMessageEvent(giftWrappedEvent);
+    await sendGiftWrappedMessageEvent(nostr!, giftWrappedEvent);
 
     if (isReceipt) {
       chatsContext.addNewlyCreatedMessageEvent(
@@ -508,43 +490,11 @@ export default function CartInvoiceCard({
 
   const onFormSubmit = async (
     data: { [x: string]: string },
-    paymentType?: "fiat" | "lightning" | "cashu"
+    paymentType?: "lightning" | "cashu" | "nwc"
   ) => {
     try {
-      let price = totalCost;
-
-      // Convert to sats if needed
-      if (products.length > 0) {
-        const firstProduct = products[0];
-        if (
-          !currencySelection.hasOwnProperty(
-            firstProduct!.currency.toUpperCase()
-          )
-        ) {
-          throw new Error(
-            `${firstProduct!.currency} is not a supported currency.`
-          );
-        } else if (
-          currencySelection.hasOwnProperty(
-            firstProduct!.currency.toUpperCase()
-          ) &&
-          firstProduct!.currency.toLowerCase() !== "sats" &&
-          firstProduct!.currency.toLowerCase() !== "sat"
-        ) {
-          try {
-            const currencyData = {
-              amount: price,
-              currency: firstProduct!.currency,
-            };
-            const numSats = await fiat.getSatoshiValue(currencyData);
-            price = Math.round(numSats);
-          } catch (err) {
-            console.error("ERROR", err);
-          }
-        } else if (firstProduct!.currency.toLowerCase() === "btc") {
-          price = price * 100000000;
-        }
-      }
+      // totalCost is already in sats with discounts applied
+      const price = totalCost;
 
       if (price < 1) {
         throw new Error("Total price is less than 1 sat.");
@@ -590,18 +540,10 @@ export default function CartInvoiceCard({
         };
       }
 
-      if (paymentType === "fiat") {
-        setPendingPaymentData(paymentData); // Store the payment data
-        if (fiatPaymentOptions.length === 1) {
-          setSelectedFiatOption(fiatPaymentOptions[0]!);
-          // Show payment instructions
-          setShowFiatPaymentInstructions(true);
-        } else if (fiatPaymentOptions.length > 1) {
-          setShowFiatTypeOption(true);
-        }
-        return; // Important: exit early for fiat payments
-      } else if (paymentType === "cashu") {
+      if (paymentType === "cashu") {
         await handleCashuPayment(price, paymentData);
+      } else if (paymentType === "nwc") {
+        await handleNWCPayment(price, paymentData);
       } else {
         await handleLightningPayment(price, paymentData);
       }
@@ -616,361 +558,96 @@ export default function CartInvoiceCard({
 
     if (selectedOrderType === "shipping") {
       setFormType("shipping");
+      // Calculate total with shipping
+      let shippingTotal = 0;
+      products.forEach((product) => {
+        const shippingCost = product.shippingCost || 0;
+        const quantity = quantities[product.id] || 1;
+        shippingTotal += Math.ceil(shippingCost * quantity);
+      });
+      setTotalCost(subtotalCost + shippingTotal);
     } else if (selectedOrderType === "contact") {
       setFormType("contact");
+      // No shipping for contact/pickup
+      setTotalCost(subtotalCost);
     } else if (selectedOrderType === "combined") {
       setFormType("combined");
       // Show Free/Pickup preference selection if we have mixed shipping with Free/Pickup
       if (hasMixedShippingWithFreePickup) {
         setShowFreePickupSelection(true);
+      } else {
+        // Calculate shipping for combined non-Free/Pickup items
+        let shippingTotal = 0;
+        products.forEach((product) => {
+          const productShippingType = shippingTypes[product.id];
+          if (
+            productShippingType === "Added Cost" ||
+            productShippingType === "Free"
+          ) {
+            const shippingCost = product.shippingCost || 0;
+            const quantity = quantities[product.id] || 1;
+            shippingTotal += Math.ceil(shippingCost * quantity);
+          }
+        });
+        setTotalCost(subtotalCost + shippingTotal);
       }
     }
   };
 
-  const handleFiatPayment = async (convertedPrice: number, data: any) => {
+  const handleNWCError = (error: any) => {
+    console.error("NWC Payment failed:", error);
+    let message = "Payment failed. Please try again.";
+    if (error && typeof error === "object" && "code" in error) {
+      switch (error.code) {
+        case "INSUFFICIENT_BALANCE":
+          message = "Payment failed: Insufficient balance in your wallet.";
+          break;
+        case "QUOTA_EXCEEDED":
+          message =
+            "Payment failed: Your wallet's spending quota has been exceeded.";
+          break;
+        case "PAYMENT_FAILED":
+          message =
+            "The payment failed. Please check your wallet and try again.";
+          break;
+        case "RATE_LIMITED":
+          message =
+            "You are sending payments too quickly. Please wait a moment.";
+          break;
+        default:
+          message = error.message || "An unknown wallet error occurred.";
+      }
+    } else if (error instanceof Error) {
+      message = error.message;
+    }
+    setFailureText(`NWC Error: ${message}`);
+    setShowFailureModal(true);
+  };
+
+  const handleNWCPayment = async (convertedPrice: number, data: any) => {
+    setIsNwcLoading(true);
+    let nwc: webln.NostrWebLNProvider | null = null;
+
     try {
       validatePaymentData(convertedPrice, data);
 
-      const userPubkey = await signer?.getPubKey?.();
-      const userNPub = userPubkey ? nip19.npubEncode(userPubkey) : undefined;
-      for (const product of products) {
-        const title = product.title;
-        const pubkey = product.pubkey;
-        const required = product.required;
-        const orderId = uuidv4();
+      const wallet = new CashuWallet(new CashuMint(mints[0]!));
+      const { request: pr, quote: hash } =
+        await wallet.createMintQuote(convertedPrice);
 
-        // Generate keys once per order to ensure consistent sender pubkey
-        const orderKeys = await generateNewKeys();
-        if (!orderKeys) {
-          setFailureText("Failed to generate new keys for messages!");
-          setShowFailureModal(true);
-          return;
-        }
+      const { nwcString } = getLocalStorageData();
+      if (!nwcString) throw new Error("NWC connection not found.");
 
-        let productDetails = "";
-        if (product.selectedSize) {
-          productDetails += " in a size " + product.selectedSize;
-        }
-        if (product.selectedVolume) {
-          if (productDetails) {
-            productDetails += " and a " + product.selectedVolume;
-          } else {
-            productDetails += " in a " + product.selectedVolume;
-          }
-        }
+      nwc = new webln.NostrWebLNProvider({ nostrWalletConnectUrl: nwcString });
+      await nwc.enable();
 
-        // Add pickup location if available for this specific product
-        const pickupLocation =
-          selectedPickupLocations[product.id] ||
-          data[`pickupLocation_${product.id}`];
-        if (pickupLocation) {
-          if (productDetails) {
-            productDetails += " (pickup at: " + pickupLocation + ")";
-          } else {
-            productDetails += " (pickup at: " + pickupLocation + ")";
-          }
-        }
-
-        let paymentMessage = "";
-        if (quantities[product.id] && quantities[product.id]! > 1) {
-          paymentMessage =
-            "You have received an order from " +
-            userNPub +
-            " for " +
-            quantities[product.id] +
-            " of your " +
-            title +
-            " listing" +
-            productDetails +
-            " on Shopstr! Check your " +
-            selectedFiatOption +
-            " account for the payment.";
-        } else {
-          paymentMessage =
-            "You have received an order from " +
-            userNPub +
-            " for your " +
-            title +
-            " listing" +
-            productDetails +
-            " on Shopstr! Check your " +
-            selectedFiatOption +
-            " account for the payment.";
-        }
-
-        await sendPaymentAndContactMessageWithKeys(
-          pubkey,
-          paymentMessage,
-          product,
-          true,
-          false,
-          false,
-          orderId,
-          "fiat",
-          "",
-          "",
-          undefined,
-          quantities[product.id] && quantities[product.id]! > 1
-            ? quantities[product.id]
-            : 1,
-          orderKeys
-        );
-
-        if (required && required !== "" && data.additionalInfo) {
-          const additionalMessage =
-            "Additional customer information: " + data.additionalInfo;
-          await sendPaymentAndContactMessageWithKeys(
-            pubkey,
-            additionalMessage,
-            product,
-            false,
-            false,
-            false,
-            orderId,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            orderKeys
-          );
-        }
-
-        if (
-          !(
-            data.shippingName === undefined &&
-            data.shippingAddress === undefined &&
-            data.shippingUnitNo === undefined &&
-            data.shippingCity === undefined &&
-            data.shippingPostalCode === undefined &&
-            data.shippingState === undefined &&
-            data.shippingCountry === undefined &&
-            data.contact === undefined &&
-            data.contactType === undefined &&
-            data.contactInstructions === undefined
-          )
-        ) {
-          const productShippingType = shippingTypes[product.id];
-
-          if (
-            productShippingType === "Added Cost" ||
-            productShippingType === "Free" ||
-            (productShippingType === "Free/Pickup" && formType === "shipping")
-          ) {
-            let contactMessage = "";
-            if (!data.shippingUnitNo) {
-              contactMessage =
-                "Please ship the product" +
-                productDetails +
-                " to " +
-                data.shippingName +
-                " at " +
-                data.shippingAddress +
-                ", " +
-                data.shippingCity +
-                ", " +
-                data.shippingPostalCode +
-                ", " +
-                data.shippingState +
-                ", " +
-                data.shippingCountry +
-                ".";
-            } else {
-              contactMessage =
-                "Please ship the product" +
-                productDetails +
-                " to " +
-                data.shippingName +
-                " at " +
-                data.shippingAddress +
-                " " +
-                data.shippingUnitNo +
-                ", " +
-                data.shippingCity +
-                ", " +
-                data.shippingPostalCode +
-                ", " +
-                data.shippingState +
-                ", " +
-                data.shippingCountry +
-                ".";
-            }
-            await sendPaymentAndContactMessageWithKeys(
-              pubkey,
-              contactMessage,
-              product,
-              false,
-              false,
-              false,
-              orderId,
-              undefined,
-              undefined,
-              undefined,
-              undefined,
-              undefined,
-              orderKeys
-            );
-            if (userPubkey) {
-              const receiptMessage =
-                "Your order for " +
-                title +
-                productDetails +
-                " was processed successfully! If applicable, you should be receiving delivery information from " +
-                nip19.npubEncode(product.pubkey) +
-                " as soon as they review your order.";
-              await sendPaymentAndContactMessageWithKeys(
-                userPubkey,
-                receiptMessage,
-                product,
-                false,
-                true,
-                false,
-                orderId,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                orderKeys
-              );
-            }
-          } else if (
-            productShippingType === "N/A" ||
-            productShippingType === "Pickup" ||
-            (productShippingType === "Free/Pickup" && formType === "contact")
-          ) {
-            let contactMessage;
-            let receiptMessage;
-            if (productDetails) {
-              contactMessage =
-                "To finalize the sale of your " +
-                title +
-                " listing" +
-                productDetails +
-                " on Shopstr, please contact " +
-                data.contact +
-                " over " +
-                data.contactType +
-                " using the following instructions: " +
-                data.contactInstructions;
-              receiptMessage =
-                "Your order for " +
-                title +
-                productDetails +
-                " was processed successfully! If applicable, you should be receiving delivery information from " +
-                nip19.npubEncode(product.pubkey) +
-                " as soon as they review your order.";
-            } else {
-              contactMessage =
-                "To finalize the sale of your " +
-                title +
-                " listing on Shopstr, please contact " +
-                data.contact +
-                " over " +
-                data.contactType +
-                " using the following instructions: " +
-                data.contactInstructions;
-              receiptMessage =
-                "Your order for " +
-                title +
-                " was processed successfully! If applicable, you should be receiving delivery information from " +
-                nip19.npubEncode(product.pubkey) +
-                " as soon as they review your order.";
-            }
-            await sendPaymentAndContactMessageWithKeys(
-              pubkey,
-              contactMessage,
-              product,
-              false,
-              false,
-              false,
-              orderId,
-              undefined,
-              undefined,
-              undefined,
-              undefined,
-              undefined,
-              orderKeys
-            );
-            if (userPubkey) {
-              await sendPaymentAndContactMessageWithKeys(
-                userPubkey,
-                receiptMessage,
-                product,
-                false,
-                true,
-                false,
-                orderId,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                orderKeys
-              );
-            }
-          }
-        } else if (userPubkey) {
-          let productDetails = "";
-          if (product.selectedSize) {
-            productDetails += " in size " + product.selectedSize;
-          }
-          if (product.selectedVolume) {
-            if (productDetails) {
-              productDetails += " and a " + product.selectedVolume;
-            } else {
-              productDetails += " in a " + product.selectedVolume;
-            }
-          }
-
-          // Add pickup location if available for this specific product
-          const pickupLocation =
-            selectedPickupLocations[product.id] ||
-            data[`pickupLocation_${product.id}`];
-          if (pickupLocation) {
-            if (productDetails) {
-              productDetails += " (pickup at: " + pickupLocation + ")";
-            } else {
-              productDetails += " (pickup at: " + pickupLocation + ")";
-            }
-          }
-
-          const receiptMessage =
-            "Thank you for your purchase of " +
-            title +
-            productDetails +
-            " from " +
-            nip19.npubEncode(product.pubkey) +
-            ".";
-          await sendPaymentAndContactMessageWithKeys(
-            userPubkey,
-            receiptMessage,
-            product,
-            false,
-            true,
-            false,
-            orderId,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            orderKeys
-          );
-        }
-      }
-      if (setFiatOrderIsPlaced) {
-        setFiatOrderIsPlaced(true);
-      }
-      setFormType(null);
-      setOrderConfirmed(true);
-    } catch (error) {
-      if (setFiatOrderFailed) {
-        setFiatOrderFailed(true);
-      } else {
-        setFailureText("Fiat payment failed. Please try again.");
-        setShowFailureModal(true);
-      }
+      await nwc.sendPayment(pr);
+      await invoiceHasBeenPaid(wallet, totalCost, hash, data);
+    } catch (error: any) {
+      handleNWCError(error);
+    } finally {
+      nwc?.close();
+      setIsNwcLoading(false);
     }
   };
 
@@ -1013,7 +690,7 @@ export default function CartInvoiceCard({
           console.error(e);
         }
       }
-      await invoiceHasBeenPaid(wallet, convertedPrice, hash, data);
+      await invoiceHasBeenPaid(wallet, totalCost, hash, data);
     } catch (error) {
       if (setInvoiceGenerationFailed) {
         setInvoiceGenerationFailed(true);
@@ -1197,6 +874,7 @@ export default function CartInvoiceCard({
         sellerProfile?.content?.payment_preference || "ecash";
       const lnurl = sellerProfile?.content?.lud16 || "";
 
+      // Step 1: Send payment message
       if (
         paymentPreference === "lightning" &&
         lnurl &&
@@ -1298,27 +976,33 @@ export default function CartInvoiceCard({
                 : 1,
               orderKeys
             );
+
             if (changeAmount >= 1 && changeProofs && changeProofs.length > 0) {
               const encodedChange = getEncodedToken({
                 mint: mints[0]!,
                 proofs: changeProofs,
               });
               const changeMessage = "Overpaid fee change: " + encodedChange;
-              await sendPaymentAndContactMessageWithKeys(
-                pubkey,
-                changeMessage,
-                product,
-                true,
-                false,
-                false,
-                orderId,
-                "ecash",
-                mints[0],
-                JSON.stringify(changeProofs),
-                changeAmount,
-                undefined,
-                orderKeys
-              );
+              try {
+                await sendPaymentAndContactMessageWithKeys(
+                  pubkey,
+                  changeMessage,
+                  product,
+                  true,
+                  false,
+                  false,
+                  orderId,
+                  "ecash",
+                  mints[0],
+                  JSON.stringify(changeProofs),
+                  changeAmount,
+                  undefined,
+                  orderKeys
+                );
+                await new Promise((resolve) => setTimeout(resolve, 500));
+              } catch (error) {
+                console.error("Failed to send change message:", error);
+              }
             }
           } else {
             const unusedProofs = [...keep, ...send, ...meltResponse.change];
@@ -1472,40 +1156,51 @@ export default function CartInvoiceCard({
         }
       }
 
-      let donationMessage = "";
+      // Step 2: Send donation message
       if (donationToken) {
-        donationMessage = "Sale donation: " + donationToken;
-        await sendPaymentAndContactMessage(
-          "a37118a4888e02d28e8767c08caaf73b49abdac391ad7ff18a304891e416dc33",
-          donationMessage,
-          product,
-          false,
-          false,
-          true
-        );
+        const donationMessage = "Sale donation: " + donationToken;
+        try {
+          await sendPaymentAndContactMessage(
+            "a37118a4888e02d28e8767c08caaf73b49abdac391ad7ff18a304891e416dc33",
+            donationMessage,
+            product,
+            false,
+            false,
+            true
+          );
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        } catch (error) {
+          console.error("Failed to send donation message:", error);
+        }
       }
 
+      // Step 3: Send additional info message
       if (required && required !== "" && data.additionalInfo) {
         const additionalMessage =
           "Additional customer information: " + data.additionalInfo;
-        await sendPaymentAndContactMessageWithKeys(
-          pubkey,
-          additionalMessage,
-          product,
-          false,
-          false,
-          false,
-          orderId,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          orderKeys
-        );
+        try {
+          await sendPaymentAndContactMessageWithKeys(
+            pubkey,
+            additionalMessage,
+            product,
+            false,
+            false,
+            false,
+            orderId,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            orderKeys
+          );
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        } catch (error) {
+          console.error("Failed to send additional info message:", error);
+        }
       }
 
-      // Handle shipping and contact information based on what was provided
+      // Step 4: Handle shipping and contact information
       const productShippingType = shippingTypes[product.id];
       const shouldUseShipping =
         formType === "shipping" ||
@@ -1614,12 +1309,13 @@ export default function CartInvoiceCard({
             undefined,
             orderKeys
           );
+
           if (userPubkey) {
             const receiptMessage =
               "Your order for " +
               title +
               productDetails +
-              " was processed successfully. If applicable, you should be receiving delivery information from " +
+              " was processed successfully! If applicable, you should be receiving delivery information from " +
               nip19.npubEncode(product.pubkey) +
               " as soon as they review your order.";
             await sendPaymentAndContactMessageWithKeys(
@@ -1693,7 +1389,7 @@ export default function CartInvoiceCard({
               "Your order for " +
               title +
               productDetails +
-              " was processed successfully. If applicable, you should be receiving delivery information from " +
+              " was processed successfully! If applicable, you should be receiving delivery information from " +
               nip19.npubEncode(product.pubkey) +
               " as soon as they review your order.";
           } else {
@@ -1709,7 +1405,7 @@ export default function CartInvoiceCard({
             receiptMessage =
               "Your order for " +
               title +
-              " was processed successfully. If applicable, you should be receiving delivery information from " +
+              " was processed successfully! If applicable, you should be receiving delivery information from " +
               nip19.npubEncode(product.pubkey) +
               " as soon as they review your order.";
           }
@@ -1728,6 +1424,7 @@ export default function CartInvoiceCard({
             undefined,
             orderKeys
           );
+
           if (userPubkey) {
             await sendPaymentAndContactMessageWithKeys(
               userPubkey,
@@ -1746,10 +1443,8 @@ export default function CartInvoiceCard({
             );
           }
         }
-      }
-
-      // Always send receipt message for successful payments
-      if (userPubkey) {
+      } else if (userPubkey) {
+        // Step 5: Always send final receipt message
         let productDetails = "";
         if (product.selectedSize) {
           productDetails += " in size " + product.selectedSize;
@@ -2338,39 +2033,82 @@ export default function CartInvoiceCard({
                     Cost Breakdown
                   </h4>
                   <div className="space-y-3">
-                    {products.map((product) => (
-                      <div
-                        key={product.id}
-                        className="space-y-2 border-l-2 border-gray-200 pl-3 dark:border-gray-600"
-                      >
-                        <div className="text-sm font-medium">
-                          {product.title}{" "}
-                          {quantities[product.id] &&
-                            quantities[product.id]! > 1 &&
-                            `(x${quantities[product.id]})`}
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="ml-2">Product cost:</span>
-                          <span>
-                            {formatWithCommas(
-                              (product.volumePrice !== undefined
-                                ? product.volumePrice
-                                : product.price) *
-                                (quantities[product.id] || 1),
-                              "sats"
-                            )}
-                          </span>
-                        </div>
-                        {product.shippingCost! > 0 && (
+                    {products.map((product) => {
+                      const discount = appliedDiscounts[product.pubkey] || 0;
+                      const basePrice =
+                        (product.volumePrice !== undefined
+                          ? product.volumePrice
+                          : product.price) * (quantities[product.id] || 1);
+                      const discountedPrice =
+                        discount > 0
+                          ? basePrice * (1 - discount / 100)
+                          : basePrice;
+
+                      return (
+                        <div
+                          key={product.id}
+                          className="space-y-2 border-l-2 border-gray-200 pl-3 dark:border-gray-600"
+                        >
+                          <div className="text-sm font-medium">
+                            {product.title}{" "}
+                            {quantities[product.id] &&
+                              quantities[product.id]! > 1 &&
+                              `(x${quantities[product.id]})`}
+                          </div>
                           <div className="flex justify-between text-sm">
-                            <span className="ml-2">Shipping cost:</span>
-                            <span>
-                              {formatWithCommas(product.shippingCost!, "sats")}
+                            <span className="ml-2">Product cost:</span>
+                            <span
+                              className={
+                                discount > 0 ? "text-gray-500 line-through" : ""
+                              }
+                            >
+                              {formatWithCommas(basePrice, product.currency)}
                             </span>
                           </div>
-                        )}
-                      </div>
-                    ))}
+                          {discount > 0 && (
+                            <>
+                              <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+                                <span className="ml-2">
+                                  {(discountCodes &&
+                                    discountCodes[product.pubkey]) ||
+                                    "Discount"}{" "}
+                                  ({discount}%):
+                                </span>
+                                <span>
+                                  -
+                                  {formatWithCommas(
+                                    Math.ceil(
+                                      ((basePrice * discount) / 100) * 100
+                                    ) / 100,
+                                    product.currency
+                                  )}
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-sm font-medium">
+                                <span className="ml-2">Discounted price:</span>
+                                <span>
+                                  {formatWithCommas(
+                                    discountedPrice,
+                                    product.currency
+                                  )}
+                                </span>
+                              </div>
+                            </>
+                          )}
+                          {product.shippingCost! > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="ml-2">Shipping cost:</span>
+                              <span>
+                                {formatWithCommas(
+                                  product.shippingCost!,
+                                  product.currency
+                                )}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                   <div className="flex justify-between border-t pt-2 font-semibold">
                     <span>Total:</span>
@@ -2506,38 +2244,108 @@ export default function CartInvoiceCard({
                   Cost Breakdown
                 </h4>
                 <div className="space-y-3">
-                  {products.map((product) => (
-                    <div
-                      key={product.id}
-                      className="space-y-2 border-l-2 border-gray-200 pl-3 dark:border-gray-600"
-                    >
-                      <div className="text-sm font-medium">
-                        {product.title}{" "}
-                        {quantities[product.id] &&
-                          quantities[product.id]! > 1 &&
-                          `(x${quantities[product.id]})`}
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="ml-2">Product cost:</span>
-                        <span>
-                          {formatWithCommas(
-                            (product.volumePrice !== undefined
-                              ? product.volumePrice
-                              : product.price) * (quantities[product.id] || 1),
-                            "sats"
-                          )}
-                        </span>
-                      </div>
-                      {product.shippingCost! > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="ml-2">Shipping cost:</span>
+                  {products.map((product) => {
+                    const discount = appliedDiscounts[product.pubkey] || 0;
+                    const originalPrice =
+                      product.volumePrice !== undefined
+                        ? product.volumePrice
+                        : product.price;
+                    const basePrice =
+                      originalPrice * (quantities[product.id] || 1);
+                    const discountedPrice =
+                      discount > 0
+                        ? basePrice * (1 - discount / 100)
+                        : basePrice;
+
+                    // Determine if shipping should be shown for this product
+                    const productShippingType = shippingTypes[product.id];
+                    const shouldShowShipping =
+                      formType === "shipping" ||
+                      (formType === "combined" &&
+                        (productShippingType === "Added Cost" ||
+                          productShippingType === "Free" ||
+                          (productShippingType === "Free/Pickup" &&
+                            freePickupPreference === "shipping")));
+
+                    return (
+                      <div
+                        key={product.id}
+                        className="space-y-2 border-l-2 border-gray-200 pl-3 dark:border-gray-600"
+                      >
+                        <div className="text-sm font-medium">
+                          {product.title}{" "}
+                          {quantities[product.id] &&
+                            quantities[product.id]! > 1 &&
+                            `(x${quantities[product.id]})`}
+                        </div>
+                        <div className="flex justify-between text-sm text-gray-500 dark:text-gray-400">
+                          <span className="ml-2">Original price:</span>
                           <span>
-                            {formatWithCommas(product.shippingCost!, "sats")}
+                            {formatWithCommas(originalPrice, product.currency)}
                           </span>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        {quantities[product.id] &&
+                          quantities[product.id]! > 1 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="ml-2">
+                                Base cost ({quantities[product.id]}x):
+                              </span>
+                              <span
+                                className={
+                                  discount > 0
+                                    ? "text-gray-500 line-through"
+                                    : ""
+                                }
+                              >
+                                {formatWithCommas(basePrice, product.currency)}
+                              </span>
+                            </div>
+                          )}
+                        {discount > 0 && (
+                          <>
+                            <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+                              <span className="ml-2">
+                                {(discountCodes &&
+                                  discountCodes[product.pubkey]) ||
+                                  "Discount"}{" "}
+                                ({discount}%):
+                              </span>
+                              <span>
+                                -
+                                {formatWithCommas(
+                                  Math.ceil(
+                                    ((basePrice * discount) / 100) * 100
+                                  ) / 100,
+                                  product.currency
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm font-medium">
+                              <span className="ml-2">Discounted price:</span>
+                              <span>
+                                {formatWithCommas(
+                                  discountedPrice,
+                                  product.currency
+                                )}
+                              </span>
+                            </div>
+                          </>
+                        )}
+                        {shouldShowShipping && product.shippingCost! > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="ml-2">Shipping cost:</span>
+                            <span>
+                              {formatWithCommas(
+                                product.shippingCost! *
+                                  (quantities[product.id] || 1),
+                                product.currency
+                              )}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 <div className="flex justify-between border-t pt-2 font-semibold">
                   <span>Total:</span>
@@ -2647,6 +2455,21 @@ export default function CartInvoiceCard({
                   onClick={() => {
                     setFreePickupPreference("shipping");
                     setShowFreePickupSelection(false);
+                    // Calculate total with all applicable shipping
+                    let shippingTotal = 0;
+                    products.forEach((product) => {
+                      const productShippingType = shippingTypes[product.id];
+                      if (
+                        productShippingType === "Added Cost" ||
+                        productShippingType === "Free" ||
+                        productShippingType === "Free/Pickup"
+                      ) {
+                        const shippingCost = product.shippingCost || 0;
+                        const quantity = quantities[product.id] || 1;
+                        shippingTotal += Math.ceil(shippingCost * quantity);
+                      }
+                    });
+                    setTotalCost(subtotalCost + shippingTotal);
                   }}
                   className={`w-full rounded-lg border p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-600 ${
                     freePickupPreference === "shipping"
@@ -2663,6 +2486,20 @@ export default function CartInvoiceCard({
                   onClick={() => {
                     setFreePickupPreference("contact");
                     setShowFreePickupSelection(false);
+                    // Calculate shipping for non-Free/Pickup items only
+                    let shippingTotal = 0;
+                    products.forEach((product) => {
+                      const productShippingType = shippingTypes[product.id];
+                      if (
+                        productShippingType === "Added Cost" ||
+                        productShippingType === "Free"
+                      ) {
+                        const shippingCost = product.shippingCost || 0;
+                        const quantity = quantities[product.id] || 1;
+                        shippingTotal += Math.ceil(shippingCost * quantity);
+                      }
+                    });
+                    setTotalCost(subtotalCost + shippingTotal);
                   }}
                   className={`w-full rounded-lg border p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-600 ${
                     freePickupPreference === "contact"
@@ -2730,27 +2567,6 @@ export default function CartInvoiceCard({
                 <div className="space-y-4 border-t pt-6">
                   <h3 className="mb-4 text-lg font-semibold">Payment Method</h3>
 
-                  {fiatPaymentOptions.length > 0 && (
-                    <Button
-                      className={`${SHOPSTRBUTTONCLASSNAMES} w-full ${
-                        !isFormValid ? "cursor-not-allowed opacity-50" : ""
-                      }`}
-                      disabled={!isFormValid}
-                      onClick={() => {
-                        if (!isLoggedIn) {
-                          onOpen();
-                          return;
-                        }
-                        handleFormSubmit((data) =>
-                          onFormSubmit(data, "fiat")
-                        )();
-                      }}
-                      startContent={<CurrencyDollarIcon className="h-6 w-6" />}
-                    >
-                      Pay with Fiat
-                    </Button>
-                  )}
-
                   <Button
                     className={`${SHOPSTRBUTTONCLASSNAMES} w-full ${
                       !isFormValid ? "cursor-not-allowed opacity-50" : ""
@@ -2790,6 +2606,27 @@ export default function CartInvoiceCard({
                       Pay with Cashu: {formattedTotalCost}
                     </Button>
                   )}
+
+                  {/* NWC Button */}
+                  {nwcInfo && (
+                    <Button
+                      className={`${SHOPSTRBUTTONCLASSNAMES} w-full ${
+                        !isFormValid ? "cursor-not-allowed opacity-50" : ""
+                      }`}
+                      disabled={!isFormValid || isNwcLoading}
+                      isLoading={isNwcLoading}
+                      onClick={() => {
+                        if (!isLoggedIn) {
+                          onOpen();
+                          return;
+                        }
+                        handleFormSubmit((data) => onFormSubmit(data, "nwc"))();
+                      }}
+                      startContent={<WalletIcon className="h-6 w-6" />}
+                    >
+                      Pay with {nwcInfo.alias || "NWC"}: {formattedTotalCost}
+                    </Button>
+                  )}
                 </div>
               </form>
             </>
@@ -2809,157 +2646,6 @@ export default function CartInvoiceCard({
           )}
         </div>
       </div>
-
-      {/* Modals */}
-      <Modal
-        backdrop="blur"
-        isOpen={showFiatTypeOption}
-        onClose={() => setShowFiatTypeOption(false)}
-        classNames={{
-          body: "py-6 ",
-          backdrop: "bg-[#292f46]/50 backdrop-opacity-60",
-          header: "border-b-[1px] border-[#292f46]",
-          footer: "border-t-[1px] border-[#292f46]",
-          closeButton: "hover:bg-black/5 active:bg-white/10",
-        }}
-        isDismissable={true}
-        scrollBehavior={"normal"}
-        placement={"center"}
-        size="2xl"
-      >
-        <ModalContent>
-          <ModalHeader className="flex items-center justify-center text-light-text dark:text-dark-text">
-            Select your fiat payment preference:
-          </ModalHeader>
-          <ModalBody className="flex flex-col overflow-hidden">
-            <div className="flex items-center justify-center">
-              <Select
-                label="Fiat Payment Options"
-                className="max-w-xs"
-                onChange={(e) => {
-                  setSelectedFiatOption(e.target.value);
-                  setShowFiatTypeOption(false);
-                  // Show payment instructions
-                  setShowFiatPaymentInstructions(true);
-                }}
-              >
-                {fiatPaymentOptions &&
-                  fiatPaymentOptions.map((option) => (
-                    <SelectItem
-                      key={option}
-                      value={option}
-                      className="text-light-text dark:text-dark-text"
-                    >
-                      {option}
-                    </SelectItem>
-                  ))}
-              </Select>
-            </div>
-          </ModalBody>
-        </ModalContent>
-      </Modal>
-
-      {/* Fiat Payment Instructions */}
-      {showFiatPaymentInstructions && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="max-w-md rounded-lg bg-white p-8 text-center dark:bg-gray-800">
-            {selectedFiatOption === "cash" ? (
-              <>
-                <h3 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                  Cash Payment
-                </h3>
-                <p className="mb-6 text-gray-600 dark:text-gray-400">
-                  You will need {formatWithCommas(totalCost, "sats")} in cash
-                  for this order.
-                </p>
-                <div className="mb-6 flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="paymentConfirmed"
-                    checked={fiatPaymentConfirmed}
-                    onChange={(e) => setFiatPaymentConfirmed(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-shopstr-purple focus:ring-shopstr-purple"
-                  />
-                  <label
-                    htmlFor="paymentConfirmed"
-                    className="text-left text-gray-700 dark:text-gray-300"
-                  >
-                    I will have the sufficient cash to complete the order upon
-                    pickup or delivery
-                  </label>
-                </div>
-              </>
-            ) : (
-              <>
-                <h3 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                  Send Payment
-                </h3>
-                <p className="mb-4 text-gray-600 dark:text-gray-400">
-                  Please send {formatWithCommas(totalCost, "sats")} to:
-                </p>
-                <div className="mb-6 rounded-lg bg-gray-100 p-4 dark:bg-gray-700">
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {selectedFiatOption}:{" "}
-                    {(products.length > 0 &&
-                      profileContext.profileData.get(products[0]!.pubkey)
-                        ?.content?.fiat_options?.[selectedFiatOption]) ||
-                      "N/A"}
-                  </p>
-                </div>
-                <div className="mb-6 flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="paymentConfirmed"
-                    checked={fiatPaymentConfirmed}
-                    onChange={(e) => setFiatPaymentConfirmed(e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-shopstr-purple focus:ring-shopstr-purple"
-                  />
-                  <label
-                    htmlFor="paymentConfirmed"
-                    className="text-gray-700 dark:text-gray-300"
-                  >
-                    I have sent the payment
-                  </label>
-                </div>
-              </>
-            )}
-            <div className="space-y-2">
-              <Button
-                onClick={async () => {
-                  if (fiatPaymentConfirmed) {
-                    setShowFiatPaymentInstructions(false);
-                    await handleFiatPayment(
-                      totalCost,
-                      pendingPaymentData || {}
-                    );
-                    setPendingPaymentData(null); // Clear stored data
-                  }
-                }}
-                disabled={!fiatPaymentConfirmed}
-                className={`${SHOPSTRBUTTONCLASSNAMES} w-full ${
-                  !fiatPaymentConfirmed ? "cursor-not-allowed opacity-50" : ""
-                }`}
-              >
-                {selectedFiatOption === "cash"
-                  ? "Confirm Order"
-                  : "Confirm Payment Sent"}
-              </Button>
-              <Button
-                onClick={() => {
-                  setShowFiatPaymentInstructions(false);
-                  setFiatPaymentConfirmed(false);
-                  setSelectedFiatOption("");
-                  setPendingPaymentData(null); // Clear stored data
-                }}
-                variant="bordered"
-                className="w-full"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <SignInModal isOpen={isOpen} onClose={onClose} />
 
