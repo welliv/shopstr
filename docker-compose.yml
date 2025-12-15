@@ -15,7 +15,7 @@ services:
       - ./.next:/app/.next
     # 3. Added a port mapping
     ports:
-      - "3000:5000"
+      - "3000:3000"
 
 volumes:
   node_modules:
