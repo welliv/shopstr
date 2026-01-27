@@ -1,21 +1,40 @@
+version: '3.8'
+
 services:
-  # 1. Added a service name ('app')
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: shopstr
+      POSTGRES_PASSWORD: shopstr
+      POSTGRES_DB: shopstr
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   app:
     image: node:18-alpine
     working_dir: /app
+    depends_on:
+      - db
     environment:
-      NODE_ENV: development # Changed for npm run dev
+      NODE_ENV: development
       NEXT_TELEMETRY_DISABLED: "1"
-    # 2. Changed the command to start the dev server
+      # Points to the 'db' service defined above
+      DATABASE_URL: postgresql://shopstr:shopstr@db:5432/shopstr
+    # Next.js listens on 5000, bound to 0.0.0.0 for Docker access
     command: >
-      sh -c "npm ci && npm run dev"
+      sh -c "npm ci && npx next dev -p 5000 -H 0.0.0.0"
     volumes:
       - .:/app
       - node_modules:/app/node_modules
-      - ./.next:/app/.next
-    # 3. Added a port mapping
+      - next_cache:/app/.next
     ports:
       - "3000:5000"
 
+# This section was missing or incomplete, causing your error
 volumes:
+  postgres_data:
   node_modules:
+  next_cache:
